@@ -48,7 +48,7 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
             }
             return dataset_gate && swtrig;
         },
-        {"bnbdata", "extdata", "_opfilter_pe_beam", "_opfilter_pe_veto", "software_trigger"});
+        {"bnbdata", "extdata", "optical_filter_pe_beam", "optical_filter_pe_veto", "software_trigger"});
 
     auto flash_df = pre_df.Define(
         "pass_flash",
