@@ -57,7 +57,7 @@ install(
 )
 
 configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/rarexsec-config.cmake.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/rarexsec-config.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config.cmake
     INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
     PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_BINDIR
