@@ -6,8 +6,10 @@
 #include "TTree.h"
 #include "ROOT/RDataFrame.hxx"
 
+#include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <unordered_set>
 
 #include <rarexsec/Logger.h>
 #include <rarexsec/BlipProcessor.h>
@@ -147,20 +149,70 @@ void AnalysisDataLoader::printAllBranches() const {
 }
 
 void AnalysisDataLoader::loadAll() {
-    const std::string ext_beam{"numi_ext"};
-    std::vector<const BeamPeriodConfig *> configs_to_process;
-    for (auto &period : periods_) {
-        const auto &rc = run_registry_.get(beam_, period);
-        total_pot_ += rc.nominalPot();
-        total_triggers_ += rc.nominalTriggers();
-        configs_to_process.push_back(&rc);
+    const auto &all_configs = run_registry_.all();
+    const std::string ext_suffix{"_ext"};
 
-        auto key = ext_beam + ":" + period;
-        if (run_registry_.all().count(key)) {
+    auto add_unique = [](std::vector<std::string> &values, std::string candidate) {
+        if (candidate.empty()) {
+            return;
+        }
+        if (std::find(values.begin(), values.end(), candidate) == values.end()) {
+            values.push_back(std::move(candidate));
+        }
+    };
+
+    std::vector<std::string> beam_families;
+    add_unique(beam_families, beam_);
+    auto underscore_pos = beam_.find('_');
+    if (underscore_pos != std::string::npos) {
+        add_unique(beam_families, beam_.substr(0, underscore_pos));
+    }
+    if (beam_.size() >= ext_suffix.size() &&
+        beam_.compare(beam_.size() - ext_suffix.size(), ext_suffix.size(), ext_suffix) == 0) {
+        add_unique(beam_families, beam_.substr(0, beam_.size() - ext_suffix.size()));
+    }
+
+    std::vector<std::string> ext_beams;
+    for (const auto &[label, config] : all_configs) {
+        const std::string &candidate_beam = config.beamMode();
+        if (candidate_beam == beam_) {
+            continue;
+        }
+        if (candidate_beam.size() <= ext_suffix.size()) {
+            continue;
+        }
+        if (candidate_beam.compare(candidate_beam.size() - ext_suffix.size(), ext_suffix.size(), ext_suffix) != 0) {
+            continue;
+        }
+
+        auto candidate_prefix = candidate_beam.substr(0, candidate_beam.size() - ext_suffix.size());
+        if (std::find(beam_families.begin(), beam_families.end(), candidate_prefix) != beam_families.end()) {
+            add_unique(ext_beams, candidate_beam);
+        }
+    }
+
+    std::vector<const BeamPeriodConfig *> configs_to_process;
+    std::unordered_set<std::string> seen_labels;
+
+    auto enqueue_config = [&](const BeamPeriodConfig &config) {
+        if (seen_labels.insert(config.label()).second) {
+            total_pot_ += config.nominalPot();
+            total_triggers_ += config.nominalTriggers();
+            configs_to_process.push_back(&config);
+        }
+    };
+
+    for (const auto &period : periods_) {
+        const auto &rc = run_registry_.get(beam_, period);
+        enqueue_config(rc);
+
+        for (const auto &ext_beam : ext_beams) {
+            auto key = ext_beam + ":" + period;
+            if (!all_configs.count(key)) {
+                continue;
+            }
             const auto &ext_rc = run_registry_.get(ext_beam, period);
-            total_pot_ += ext_rc.nominalPot();
-            total_triggers_ += ext_rc.nominalTriggers();
-            configs_to_process.push_back(&ext_rc);
+            enqueue_config(ext_rc);
         }
     }
 
