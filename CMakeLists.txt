@@ -36,21 +36,7 @@ set(RAREXSEC_ROOT_COMPONENTS RIO Tree Hist ROOTDataFrame)
 set(RAREXSEC_JSON_VERSION 3.11.2)
 
 find_package(ROOT REQUIRED COMPONENTS ${RAREXSEC_ROOT_COMPONENTS})
-find_package(nlohmann_json ${RAREXSEC_JSON_VERSION} CONFIG QUIET)
-
-if(nlohmann_json_FOUND)
-    set(RAREXSEC_USE_SYSTEM_JSON TRUE)
-else()
-    message(STATUS "nlohmann_json ${RAREXSEC_JSON_VERSION} not found. Fetching from upstream.")
-    include(FetchContent)
-    FetchContent_Declare(
-        nlohmann_json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG v${RAREXSEC_JSON_VERSION}
-    )
-    FetchContent_MakeAvailable(nlohmann_json)
-    set(RAREXSEC_USE_SYSTEM_JSON FALSE)
-endif()
+find_package(nlohmann_json ${RAREXSEC_JSON_VERSION} CONFIG REQUIRED)
 
 set(RAREXSEC_EXPORT_SET rarexsecTargets)
 
