@@ -70,7 +70,8 @@ std::vector<std::string> filterAvailableColumns(const proc::AnalysisDataLoader::
             }
             for (const auto &[variation, node] : sample.variationNodes()) {
                 (void)variation;
-                if (!node.HasColumn(column)) {
+                auto mutable_node = node;
+                if (!mutable_node.HasColumn(column)) {
                     present_everywhere = false;
                     break;
                 }
