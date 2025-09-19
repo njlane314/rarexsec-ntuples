@@ -61,7 +61,7 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
             return x > 5.f && x < 251.f && y > -110.f && y < 110.f && z > 20.f && z < 986.f &&
                    (z < 675.f || z > 775.f);
         },
-        {"reco_nu_vtx_sce_x", "reco_nu_vtx_sce_y", "reco_nu_vtx_sce_z"});
+        {"reco_neutrino_vertex_sce_x", "reco_neutrino_vertex_sce_y", "reco_neutrino_vertex_sce_z"});
 
     auto mu_df = fv_df.Define("pass_mu", "n_muons_tot > 0");
 

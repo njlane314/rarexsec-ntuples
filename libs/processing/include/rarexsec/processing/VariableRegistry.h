@@ -463,9 +463,9 @@ private:
 
   static const std::vector<std::string> &processedEventVariables() {
     static const std::vector<std::string> v = {"in_reco_fiducial",
-                                               "reco_nu_vtx_sce_x",
-                                               "reco_nu_vtx_sce_y",
-                                               "reco_nu_vtx_sce_z",
+                                               "reco_neutrino_vertex_sce_x",
+                                               "reco_neutrino_vertex_sce_y",
+                                               "reco_neutrino_vertex_sce_z",
                                                "n_pfps_gen2",
                                                "n_pfps_gen3",
                                                "quality_event",
