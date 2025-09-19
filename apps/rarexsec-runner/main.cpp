@@ -1,27 +1,14 @@
+#include <algorithm>
 #include <exception>
 #include <iostream>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <rarexsec/processing/AnalysisDataLoader.h>
 #include <rarexsec/processing/RunConfigLoader.h>
 #include <rarexsec/utils/Logger.h>
-
-namespace {
-std::vector<std::string> parsePeriods(const std::string &arg) {
-    std::vector<std::string> periods;
-    std::stringstream ss(arg);
-    std::string token;
-    while (std::getline(ss, token, ',')) {
-        if (!token.empty()) {
-            periods.push_back(token);
-        }
-    }
-    return periods;
-}
-}
 
 int main(int argc, char **argv) {
     if (argc < 4) {
@@ -41,7 +28,30 @@ int main(int argc, char **argv) {
     std::string selection = argc > 4 ? argv[4] : std::string{};
     std::string output = argc > 5 ? argv[5] : std::string{};
 
-    auto periods = parsePeriods(periods_arg);
+    std::vector<std::string> periods;
+    const std::string_view periods_view{periods_arg};
+    if (!periods_view.empty()) {
+        periods.reserve(static_cast<std::size_t>(
+            std::count(periods_view.begin(), periods_view.end(), ',')) + 1);
+    }
+
+    std::size_t start = 0;
+    while (start < periods_view.size()) {
+        const auto separator = periods_view.find(',', start);
+        const auto length = separator == std::string_view::npos
+                                 ? periods_view.size() - start
+                                 : separator - start;
+
+        if (length > 0) {
+            periods.emplace_back(periods_view.substr(start, length));
+        }
+
+        if (separator == std::string_view::npos) {
+            break;
+        }
+
+        start = separator + 1;
+    }
     if (periods.empty()) {
         std::cerr << "No valid periods provided" << std::endl;
         return 1;
