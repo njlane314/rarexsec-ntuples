@@ -1,5 +1,5 @@
-#ifndef ANALYSIS_DATA_LOADER_H
-#define ANALYSIS_DATA_LOADER_H
+#ifndef SNAPSHOT_PIPELINE_BUILDER_H
+#define SNAPSHOT_PIPELINE_BUILDER_H
 
 #include <map>
 #include <memory>
@@ -9,21 +9,20 @@
 
 #include <rarexsec/AnalysisKey.h>
 #include <rarexsec/BeamPeriodConfigRegistry.h>
-#include <rarexsec/ConfiguredSample.h>
-#include <rarexsec/IEventProcessor.h>
-#include <rarexsec/SelectionQuery.h>
+#include <rarexsec/EventProcessorStage.h>
+#include <rarexsec/FilterExpression.h>
+#include <rarexsec/SamplePipeline.h>
 #include <rarexsec/VariableRegistry.h>
 
 namespace proc {
 
-class AnalysisDataLoader {
+class SnapshotPipelineBuilder {
   public:
-    using SampleFrameMap = std::map<SampleKey, ConfiguredSample>;
+    using SampleFrameMap = std::map<SampleKey, SamplePipeline>;
 
-    AnalysisDataLoader(const BeamPeriodConfigRegistry &run_config_registry,
-                       VariableRegistry variable_registry,
-                       std::string beam_mode, std::vector<std::string> periods, std::string ntuple_base_dir,
-                       bool blind = true);
+    SnapshotPipelineBuilder(const BeamPeriodConfigRegistry &run_config_registry, VariableRegistry variable_registry,
+                            std::string beam_mode, std::vector<std::string> periods, std::string ntuple_base_dir,
+                            bool blind = true);
 
     SampleFrameMap &getSampleFrames() noexcept { return frames_; }
     double getTotalPot() const noexcept { return total_pot_; }
@@ -34,7 +33,7 @@ class AnalysisDataLoader {
 
     void snapshot(const std::string &filter_expr, const std::string &output_file,
                   const std::vector<std::string> &columns = {}) const;
-    void snapshot(const SelectionQuery &query, const std::string &output_file,
+    void snapshot(const FilterExpression &query, const std::string &output_file,
                   const std::vector<std::string> &columns = {}) const;
 
     void printAllBranches() const;
@@ -52,31 +51,32 @@ class AnalysisDataLoader {
     long total_triggers_;
 
     SampleFrameMap frames_;
-    std::vector<std::unique_ptr<IEventProcessor>> processors_;
+    std::vector<std::unique_ptr<EventProcessorStage>> processors_;
     std::unordered_map<SampleKey, const BeamPeriodConfig *> run_config_cache_;
 
     void loadAll();
     void processRunConfig(const BeamPeriodConfig &rc);
 
     template <typename Head, typename... Tail>
-    std::unique_ptr<IEventProcessor> chainEventProcessors(std::unique_ptr<Head> head, std::unique_ptr<Tail>... tail);
+    std::unique_ptr<EventProcessorStage> chainProcessorStages(std::unique_ptr<Head> head,
+                                                              std::unique_ptr<Tail>... tail);
 
     void writeSnapshotMetadata(const std::string &output_file) const;
     void reorganiseSnapshotTrees(const std::string &output_file) const;
 };
 
 template <typename Head, typename... Tail>
-std::unique_ptr<IEventProcessor> AnalysisDataLoader::chainEventProcessors(std::unique_ptr<Head> head,
-                                                                          std::unique_ptr<Tail>... tail) {
+std::unique_ptr<EventProcessorStage> SnapshotPipelineBuilder::chainProcessorStages(std::unique_ptr<Head> head,
+                                                                                   std::unique_ptr<Tail>... tail) {
     if constexpr (sizeof...(tail) == 0) {
         return head;
     } else {
-        auto next = this->chainEventProcessors(std::move(tail)...);
-        head->chainNextProcessor(std::move(next));
+        auto next = this->chainProcessorStages(std::move(tail)...);
+        head->chainNextStage(std::move(next));
         return head;
     }
 }
 
-}
+} // namespace proc
 
 #endif

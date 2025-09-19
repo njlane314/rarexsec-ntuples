@@ -1,7 +1,7 @@
 // This ROOT macro is kept in the main directory as a lightweight example that can
 // be imitated when scripting custom snapshot exploration workflows.
 
-#include "ExampleInterface.h"
+#include "SnapshotExplorer.h"
 
 #include "TCanvas.h"
 #include "TColor.h"
@@ -13,8 +13,8 @@
 #include <iostream>
 #include <string>
 
-using rarexsec::examples::ExampleInterface;
-using rarexsec::examples::SampleSummary;
+using rarexsec::examples::SampleMetadata;
+using rarexsec::examples::SnapshotExplorer;
 
 //
 // Example usage from the ROOT prompt:
@@ -26,7 +26,7 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
                   const char *column = "reco_nu_energy", int bins = 40, double min = 0.0, double max = 4.0,
                   const char *selection = "", const char *weight_column = "") {
     try {
-        ExampleInterface snapshot(file_name);
+        SnapshotExplorer snapshot(file_name);
 
         std::cout << "Opened snapshot file: " << snapshot.fileName() << '\n';
         std::cout << "  Total POT: " << snapshot.totalPOT() << '\n';
@@ -34,13 +34,13 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
 
         if (!snapshot.samples().empty()) {
             std::cout << "\nSamples in the file:" << '\n';
-            for (const SampleSummary &summary : snapshot.samples()) {
-                std::cout << "  - " << summary.tree_name << " (beam=" << summary.beam << ", period="
-                          << summary.run_period << ", dataset=" << summary.dataset_id << ")" << '\n';
-                std::cout << "      stage=" << summary.stage << ", variation=" << summary.variation
-                          << ", origin=" << summary.origin << '\n';
-                std::cout << "      relative_path=" << summary.relative_path << '\n';
-                std::cout << "      POT=" << summary.pot << ", triggers=" << summary.triggers << '\n';
+            for (const SampleMetadata &metadata : snapshot.samples()) {
+                std::cout << "  - " << metadata.tree_name << " (beam=" << metadata.beam << ", period="
+                          << metadata.run_period << ", dataset=" << metadata.dataset_id << ")" << '\n';
+                std::cout << "      stage=" << metadata.stage << ", variation=" << metadata.variation
+                          << ", origin=" << metadata.origin << '\n';
+                std::cout << "      relative_path=" << metadata.relative_path << '\n';
+                std::cout << "      POT=" << metadata.pot << ", triggers=" << metadata.triggers << '\n';
             }
         }
 
@@ -55,15 +55,15 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
             std::cout << "\nNo tree provided, defaulting to: " << tree_to_plot << '\n';
         }
 
-        const auto sample_handle = snapshot.sample(tree_to_plot);
-        const SampleSummary &chosen_sample = sample_handle.summary();
+        const auto sample_view = snapshot.sample(tree_to_plot);
+        const SampleMetadata &chosen_sample = sample_view.metadata();
 
         std::cout << "\nDrawing histogram from tree: " << chosen_sample.tree_name << '\n';
         std::cout << "  Stage=" << chosen_sample.stage << ", variation=" << chosen_sample.variation
                   << ", POT=" << chosen_sample.pot << ", triggers=" << chosen_sample.triggers << '\n';
 
         std::string hist_name = "h_" + chosen_sample.tree_name + "_" + column;
-        auto hist = sample_handle.hist1D(column, hist_name, bins, min, max, selection, weight_column);
+        auto hist = sample_view.hist1D(column, hist_name, bins, min, max, selection, weight_column);
 
         gStyle->SetOptStat(0);
         TCanvas *canvas = new TCanvas(("c_" + tree_to_plot).c_str(), hist_name.c_str(), 900, 650);

@@ -1,10 +1,10 @@
 set(rarexsec_processing_sources
-    AnalysisDataLoader.cpp
+    SnapshotPipelineBuilder.cpp
     BeamPeriodConfig.cpp
     BeamPeriodConfigLoader.cpp
     BeamPeriodConfigRegistry.cpp
     BlipProcessor.cpp
-    ConfiguredSample.cpp
+    SamplePipeline.cpp
     MuonSelectionProcessor.cpp
     PreselectionProcessor.cpp
     ReconstructionProcessor.cpp

@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <rarexsec/Logger.h>
-#include <rarexsec/AnalysisDataLoader.h>
+#include <rarexsec/SnapshotPipelineBuilder.h>
 #include <rarexsec/BeamPeriodConfigLoader.h>
 
 #include "RunnerParser.h"
@@ -37,15 +37,15 @@ int main(int argc, char **argv) {
     }
 
     try {
-        proc::AnalysisDataLoader loader(registry, proc::VariableRegistry{}, options.beam, options.periods,
-                                        *base_dir);
+        proc::SnapshotPipelineBuilder builder(registry, proc::VariableRegistry{}, options.beam, options.periods,
+                                              *base_dir);
         if (options.output) {
             const std::string output_file = options.output->string();
-            loader.snapshot(options.selection.value_or(""), output_file);
+            builder.snapshot(options.selection.value_or(""), output_file);
             proc::log::info("main", "Snapshot written to", output_file);
             std::cout << "ROOT snapshot saved to: " << output_file << std::endl;
         } else {
-            loader.printAllBranches();
+            builder.printAllBranches();
         }
     } catch (const std::exception &e) {
         std::cerr << "Processing failed: " << e.what() << std::endl;
