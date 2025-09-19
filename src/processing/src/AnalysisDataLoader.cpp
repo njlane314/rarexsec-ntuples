@@ -3,8 +3,6 @@
 #include "Compression.h"
 #include "TDirectory.h"
 #include "TFile.h"
-#include "TObjString.h"
-#include "TROOT.h"
 #include "TTree.h"
 #include "ROOT/RDF/RSnapshotOptions.hxx"
 
@@ -19,6 +17,28 @@
 #include <rarexsec/processing/WeightProcessor.h>
 
 namespace proc {
+
+namespace {
+
+constexpr const char *kNominalTreeName = "nominal";
+constexpr const char *kVariationDirectoryName = "variations";
+
+std::string variationTreeName(const SampleVariationDefinition &variation_def) {
+    if (!variation_def.variation_label.empty()) {
+        return variation_def.variation_label;
+    }
+    return variation_def.sample_key.str();
+}
+
+std::string nominalTreePath(const SampleKey &sample_key) {
+    return sample_key.str() + "/" + kNominalTreeName;
+}
+
+std::string variationTreePath(const SampleKey &sample_key, const SampleVariationDefinition &variation_def) {
+    return sample_key.str() + "/" + kVariationDirectoryName + "/" + variationTreeName(variation_def);
+}
+
+} // namespace
 
 AnalysisDataLoader::AnalysisDataLoader(const BeamPeriodConfigurationRegistry &run_config_registry,
                                        VariableRegistry variable_registry, std::string beam_mode,
@@ -44,34 +64,77 @@ const BeamPeriodConfiguration *AnalysisDataLoader::getRunConfigForSample(const S
 
 void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::string &output_file,
                                   const std::vector<std::string> &columns) const {
-    bool first = true;
+    if (frames_.empty()) {
+        log::warn("AnalysisDataLoader::snapshot", "No samples were written to", output_file);
+        return;
+    }
+
     ROOT::RDF::RSnapshotOptions opts;
     opts.fCompressionAlgorithm = ROOT::kLZ4;
     opts.fCompressionLevel = 4;
     opts.fAutoFlush = 30 * 1024 * 1024;
 
-    const auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_name) mutable {
-        if (!filter_expr.empty()) {
-            df = df.Filter(filter_expr);
+    const auto file_closer = [](TFile *file) {
+        if (!file) {
+            return;
         }
-        opts.fMode = first ? "RECREATE" : "UPDATE";
-        df.Snapshot(tree_name, output_file, columns, opts);
-        first = false;
+        file->Write("", TObject::kOverwrite);
+        file->Close();
+        delete file;
+    };
+    std::unique_ptr<TFile, decltype(file_closer)> snapshot_file{TFile::Open(output_file.c_str(), "RECREATE"),
+                                                                file_closer};
+    if (!snapshot_file || snapshot_file->IsZombie()) {
+        log::fatal("AnalysisDataLoader::snapshot", "Failed to open snapshot output", output_file);
+    }
+
+    bool wrote_any = false;
+
+    const auto snapshot_tree = [&](ROOT::RDF::RNode df, TDirectory *directory, const std::string &tree_name) {
+        if (!directory) {
+            log::fatal("AnalysisDataLoader::snapshot", "Invalid directory while writing snapshot", tree_name);
+        }
+        auto node = filter_expr.empty() ? df : df.Filter(filter_expr);
+        node.Snapshot(tree_name, directory, columns, opts);
+        wrote_any = true;
     };
 
     for (auto const &[key, sample] : frames_) {
-        snapshot_tree(sample.nominalNode(), key.str());
+        TDirectory *sample_dir = snapshot_file->GetDirectory(key.str().c_str());
+        if (!sample_dir) {
+            sample_dir = snapshot_file->mkdir(key.str().c_str());
+        }
+        if (!sample_dir) {
+            log::fatal("AnalysisDataLoader::snapshot", "Could not create directory for sample", key.str());
+        }
+
+        snapshot_tree(sample.nominalNode(), sample_dir, kNominalTreeName);
+
+        TDirectory *variations_dir = nullptr;
+        const auto &variation_nodes = sample.variationNodes();
         for (const auto &variation_def : sample.variationDefinitions()) {
-            const auto &variation_nodes = sample.variationNodes();
             auto it = variation_nodes.find(variation_def.variation);
             if (it == variation_nodes.end()) {
                 continue;
             }
-            snapshot_tree(it->second, variation_def.sample_key.str());
+
+            if (!variations_dir) {
+                variations_dir = sample_dir->GetDirectory(kVariationDirectoryName);
+                if (!variations_dir) {
+                    variations_dir = sample_dir->mkdir(kVariationDirectoryName);
+                }
+                if (!variations_dir) {
+                    log::fatal("AnalysisDataLoader::snapshot", "Could not create variation directory for", key.str());
+                }
+            }
+
+            snapshot_tree(it->second, variations_dir, variationTreeName(variation_def));
         }
     }
 
-    if (first) {
+    snapshot_file.reset();
+
+    if (!wrote_any) {
         log::warn("AnalysisDataLoader::snapshot", "No samples were written to", output_file);
         return;
     }
@@ -162,13 +225,6 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     }
     meta_dir->cd();
 
-    std::string recipe_hash;
-    if (const auto &hash = run_registry_.recipeHash()) {
-        recipe_hash = *hash;
-    }
-    TObjString hash_obj(recipe_hash.c_str());
-    hash_obj.Write("recipe_hash", TObject::kOverwrite);
-
     TTree totals_tree("totals", "Exposure totals");
     double total_pot = total_pot_;
     long total_triggers = total_triggers_;
@@ -177,65 +233,30 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     totals_tree.Fill();
     totals_tree.Write("", TObject::kOverwrite);
 
-    TTree samples_tree("samples", "Per-sample exposure summary");
-    std::string tree_name;
-    std::string beam;
-    std::string run_period;
-    std::string dataset_id;
-    std::string relative_path;
-    std::string variation_label;
-    std::string stage_name;
-    std::string origin_label;
-    double sample_pot;
-    long sample_triggers;
+    TTree exposure_tree("exposures", "Per-tree POT and trigger counts");
+    std::string tree_path;
+    double sample_pot = 0.0;
+    long sample_triggers = 0;
 
-    samples_tree.Branch("tree_name", &tree_name);
-    samples_tree.Branch("beam", &beam);
-    samples_tree.Branch("run_period", &run_period);
-    samples_tree.Branch("dataset_id", &dataset_id);
-    samples_tree.Branch("relative_path", &relative_path);
-    samples_tree.Branch("variation", &variation_label);
-    samples_tree.Branch("stage_name", &stage_name);
-    samples_tree.Branch("origin", &origin_label);
-    samples_tree.Branch("sample_pot", &sample_pot);
-    samples_tree.Branch("sample_triggers", &sample_triggers);
+    exposure_tree.Branch("tree_path", &tree_path);
+    exposure_tree.Branch("pot", &sample_pot);
+    exposure_tree.Branch("triggers", &sample_triggers);
 
     for (auto const &[key, sample] : frames_) {
-        const auto *rc = getRunConfigForSample(key);
-        beam = rc ? rc->beamMode() : std::string{};
-        run_period = rc ? rc->runPeriod() : std::string{};
-
-        tree_name = key.str();
-        dataset_id = sample.datasetId();
-        relative_path = sample.relativePath();
-        variation_label = "nominal";
-        stage_name = sample.stageName();
-        origin_label = originToString(sample.sampleOrigin());
+        tree_path = nominalTreePath(key);
         sample_pot = sample.pot();
         sample_triggers = sample.triggers();
-        samples_tree.Fill();
+        exposure_tree.Fill();
 
         for (const auto &variation_def : sample.variationDefinitions()) {
-            tree_name = variation_def.sample_key.str();
-            dataset_id = variation_def.dataset_id;
-            relative_path = variation_def.relative_path;
-            variation_label = variation_def.variation_label;
-            stage_name = variation_def.stage_name.empty() ? sample.stageName() : variation_def.stage_name;
-            origin_label = originToString(sample.sampleOrigin());
+            tree_path = variationTreePath(key, variation_def);
             sample_pot = variation_def.pot;
             sample_triggers = variation_def.triggers;
-
-            const auto *variation_rc = getRunConfigForSample(variation_def.sample_key);
-            if (variation_rc) {
-                beam = variation_rc->beamMode();
-                run_period = variation_rc->runPeriod();
-            }
-
-            samples_tree.Fill();
+            exposure_tree.Fill();
         }
     }
 
-    samples_tree.Write("", TObject::kOverwrite);
+    exposure_tree.Write("", TObject::kOverwrite);
     file->cd();
 }
 

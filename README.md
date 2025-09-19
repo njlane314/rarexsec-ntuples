@@ -64,3 +64,29 @@ If an output file is provided the selected events are snapshotted into that ROOT
 file; otherwise the available branches for the configured samples are printed to
 standard output.
 
+### Output ROOT file layout
+
+The snapshot command now dedicates a directory to each configured sample using
+its `sample_key` as the directory name. The nominal events are written to a
+`nominal` tree within that directory, while detector variation samples are
+placed under a `variations/` subdirectory. Variation trees adopt their
+`variation_type` label when available (falling back to the variation
+`sample_key`). The file also receives a `meta/` directory that only carries the
+exposure summaries.
+
+```
+snapshot.root
+├── <sample_key>/                   (TDirectory per nominal sample)
+│   ├── nominal                     (TTree with the nominal events)
+│   └── variations/                 (TDirectory with detector variation trees)
+│       ├── <variation_label>       (TTree per detector variation)
+│       └── …
+└── meta/
+    ├── totals                      (TTree with total_pot, total_triggers)
+    └── exposures                   (TTree with tree_path, pot, triggers)
+```
+
+The `exposures` metadata tree provides the minimal bookkeeping for each nominal
+and detector-variation tree through the stored `tree_path`, `pot`, and
+`triggers` values.
+
