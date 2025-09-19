@@ -52,7 +52,7 @@ can be used to select events or snapshot the output:
 
 ```bash
 ./build/main/rarexsec-runner/rarexsec-runner \
-    config/catalogs/samples.json \
+    config/catalogues/samples.json \
     numi \
     run1,run2 \
     [optional-selection] \

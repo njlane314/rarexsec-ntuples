@@ -22,24 +22,24 @@
 
 namespace {
 
-std::string sanitizeComponent(std::string value) {
-    std::string sanitized;
-    sanitized.reserve(value.size());
+std::string sanitiseComponent(std::string value) {
+    std::string sanitised;
+    sanitised.reserve(value.size());
     for (unsigned char ch : value) {
         if (std::isalnum(ch) || ch == '_' || ch == '-') {
-            sanitized.push_back(static_cast<char>(ch));
+            sanitised.push_back(static_cast<char>(ch));
         } else {
-            sanitized.push_back('_');
+            sanitised.push_back('_');
         }
     }
-    if (sanitized.empty()) {
-        sanitized = "unnamed";
+    if (sanitised.empty()) {
+        sanitised = "unnamed";
     }
-    return sanitized;
+    return sanitised;
 }
 
 std::vector<std::string> nominalDirectoryComponents(const proc::SampleKey &sample_key) {
-    return {"samples", sanitizeComponent(sample_key.str()), "nominal"};
+    return {"samples", sanitiseComponent(sample_key.str()), "nominal"};
 }
 
 std::vector<std::string> variationDirectoryComponents(const proc::SampleKey &base_key,
@@ -48,7 +48,7 @@ std::vector<std::string> variationDirectoryComponents(const proc::SampleKey &bas
     if (label.empty()) {
         label = proc::variationToKey(variation_def.variation);
     }
-    return {"samples", sanitizeComponent(base_key.str()), "variations", sanitizeComponent(label)};
+    return {"samples", sanitiseComponent(base_key.str()), "variations", sanitiseComponent(label)};
 }
 
 std::string componentsToPath(const std::vector<std::string> &components) {
@@ -131,7 +131,7 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
         return;
     }
 
-    reorganizeSnapshotTrees(output_file);
+    reorganiseSnapshotTrees(output_file);
     writeSnapshotMetadata(output_file);
 }
 
@@ -300,10 +300,10 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     file->cd();
 }
 
-void AnalysisDataLoader::reorganizeSnapshotTrees(const std::string &output_file) const {
+void AnalysisDataLoader::reorganiseSnapshotTrees(const std::string &output_file) const {
     std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "UPDATE")};
     if (!file || file->IsZombie()) {
-        log::fatal("AnalysisDataLoader::reorganizeSnapshotTrees", "Failed to open snapshot output", output_file);
+        log::fatal("AnalysisDataLoader::reorganiseSnapshotTrees", "Failed to open snapshot output", output_file);
     }
 
     const auto ensureDirectory = [&](const std::vector<std::string> &components) {
@@ -317,7 +317,7 @@ void AnalysisDataLoader::reorganizeSnapshotTrees(const std::string &output_file)
                 next = current->mkdir(component.c_str());
             }
             if (!next) {
-                log::fatal("AnalysisDataLoader::reorganizeSnapshotTrees", "Failed to create directory component", component);
+                log::fatal("AnalysisDataLoader::reorganiseSnapshotTrees", "Failed to create directory component", component);
             }
             current = next;
         }
@@ -331,7 +331,7 @@ void AnalysisDataLoader::reorganizeSnapshotTrees(const std::string &output_file)
         TTree *tree = nullptr;
         file->GetObject(tree_name.c_str(), tree);
         if (!tree) {
-            log::warn("AnalysisDataLoader::reorganizeSnapshotTrees", "Could not locate snapshot tree", tree_name);
+            log::warn("AnalysisDataLoader::reorganiseSnapshotTrees", "Could not locate snapshot tree", tree_name);
             return;
         }
 
