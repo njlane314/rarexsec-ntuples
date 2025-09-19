@@ -21,9 +21,13 @@ class BeamPeriodConfigurationRegistry {
     void setBaseDirectory(std::string base_directory);
     const std::optional<std::string> &baseDirectory() const noexcept { return base_directory_; }
 
+    void setRecipeHash(std::string recipe_hash);
+    const std::optional<std::string> &recipeHash() const noexcept { return recipe_hash_; }
+
   private:
     std::map<std::string, BeamPeriodConfiguration> configs_;
     std::optional<std::string> base_directory_;
+    std::optional<std::string> recipe_hash_;
 };
 
 }
