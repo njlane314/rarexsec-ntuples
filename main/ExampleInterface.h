@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_EXAMPLES_SNAPSHOTPLOTINTERFACE_H
-#define RAREXSEC_EXAMPLES_SNAPSHOTPLOTINTERFACE_H
+#ifndef RAREXSEC_MAIN_EXAMPLEINTERFACE_H
+#define RAREXSEC_MAIN_EXAMPLEINTERFACE_H
 
 #include <ROOT/RDataFrame.hxx>
 #include <ROOT/RDF/TH1DModel.hxx>
@@ -44,7 +44,7 @@ struct SampleSummary {
  * @brief Utility class that reads metadata from a rarexsec snapshot ROOT file and provides
  *        helpers to build ROOT::RDataFrame driven histograms.
  */
-class SnapshotPlotInterface {
+class ExampleInterface {
   public:
     /**
      * @brief Lightweight proxy providing convenience methods for a single snapshot sample.
@@ -70,16 +70,16 @@ class SnapshotPlotInterface {
         }
 
       private:
-        SampleHandle(const SnapshotPlotInterface *owner, const SampleSummary *summary)
+        SampleHandle(const ExampleInterface *owner, const SampleSummary *summary)
             : owner_(owner), summary_(summary) {}
 
-        const SnapshotPlotInterface *owner_ = nullptr;
+        const ExampleInterface *owner_ = nullptr;
         const SampleSummary *summary_ = nullptr;
 
-        friend class SnapshotPlotInterface;
+        friend class ExampleInterface;
     };
 
-    explicit SnapshotPlotInterface(std::string file_name) : file_name_(std::move(file_name)) { loadMetadata(); }
+    explicit ExampleInterface(std::string file_name) : file_name_(std::move(file_name)) { loadMetadata(); }
 
     const std::string &fileName() const { return file_name_; }
 
@@ -118,7 +118,7 @@ class SnapshotPlotInterface {
     SampleHandle sample(const std::string &tree_name) const {
         auto handle = trySample(tree_name);
         if (!handle) {
-            throw std::runtime_error("SnapshotPlotInterface: unknown tree '" + tree_name + "' in " + file_name_);
+            throw std::runtime_error("ExampleInterface: unknown tree '" + tree_name + "' in " + file_name_);
         }
         return *handle;
     }
@@ -167,7 +167,7 @@ class SnapshotPlotInterface {
     const SampleSummary &requireSample(const std::string &tree_name) const {
         auto it = sample_index_.find(tree_name);
         if (it == sample_index_.end()) {
-            throw std::runtime_error("SnapshotPlotInterface: unknown tree '" + tree_name + "' in " + file_name_);
+            throw std::runtime_error("ExampleInterface: unknown tree '" + tree_name + "' in " + file_name_);
         }
         return samples_.at(it->second);
     }
@@ -175,12 +175,12 @@ class SnapshotPlotInterface {
     void loadMetadata() {
         std::unique_ptr<TFile> file{TFile::Open(file_name_.c_str(), "READ")};
         if (!file || file->IsZombie()) {
-            throw std::runtime_error("SnapshotPlotInterface: unable to open file " + file_name_);
+            throw std::runtime_error("ExampleInterface: unable to open file " + file_name_);
         }
 
         TDirectory *meta_dir = file->GetDirectory("meta");
         if (!meta_dir) {
-            throw std::runtime_error("SnapshotPlotInterface: missing 'meta' directory in " + file_name_);
+            throw std::runtime_error("ExampleInterface: missing 'meta' directory in " + file_name_);
         }
 
         total_pot_ = 0.0;
@@ -240,4 +240,4 @@ class SnapshotPlotInterface {
 
 } // namespace rarexsec::examples
 
-#endif // RAREXSEC_EXAMPLES_SNAPSHOTPLOTINTERFACE_H
+#endif // RAREXSEC_MAIN_EXAMPLEINTERFACE_H

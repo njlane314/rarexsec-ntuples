@@ -1,4 +1,4 @@
-#include "examples/SnapshotPlotInterface.h"
+#include "main/ExampleInterface.h"
 
 #include "TCanvas.h"
 #include "TColor.h"
@@ -10,8 +10,8 @@
 #include <iostream>
 #include <string>
 
+using rarexsec::examples::ExampleInterface;
 using rarexsec::examples::SampleSummary;
-using rarexsec::examples::SnapshotPlotInterface;
 
 //
 // Usage from the ROOT prompt:
@@ -23,7 +23,7 @@ void plot_snapshot(const char *file_name = "analysis_snapshot.root", const char 
                    const char *column = "reco_nu_energy", int bins = 40, double min = 0.0, double max = 4.0,
                    const char *selection = "", const char *weight_column = "") {
     try {
-        SnapshotPlotInterface snapshot(file_name);
+        ExampleInterface snapshot(file_name);
 
         std::cout << "Opened snapshot file: " << snapshot.fileName() << '\n';
         std::cout << "  Total POT: " << snapshot.totalPOT() << '\n';
