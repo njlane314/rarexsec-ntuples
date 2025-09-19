@@ -1,6 +1,5 @@
 #include <rarexsec/AnalysisDataLoader.h>
 
-#include "Compression.h"
 #include "TDirectory.h"
 #include "TFile.h"
 #include "TROOT.h"
@@ -100,9 +99,6 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
                                   const std::vector<std::string> &columns) const {
     bool first = true;
     ROOT::RDF::RSnapshotOptions opts;
-    opts.fCompressionAlgorithm = ROOT::kLZ4;
-    opts.fCompressionLevel = 4;
-    opts.fAutoFlush = 30 * 1024 * 1024;
 
     auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_name) {
         if (!filter_expr.empty()) {
