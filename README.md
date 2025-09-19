@@ -1,4 +1,4 @@
-# rarexsec Processing Toolkit
+# rarexsec-ntuples
 
 This repository provides a small processing library and a command-line runner
 for assembling ROOT `RDataFrame` pipelines driven by configuration JSON files.
