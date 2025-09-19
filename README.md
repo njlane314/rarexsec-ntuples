@@ -63,6 +63,27 @@ If an output file is provided the selected events are snapshotted into that ROOT
 file; otherwise the available branches for the configured samples are printed to
 standard output.
 
+### CNN snapshot runner
+
+When preparing datasets for convolutional neural network training, the
+`rarexsec-cnn-snapshot` executable provides the same structured output layout as
+the general runner but restricts the stored branches to a CNN-friendly subset.
+Usage mirrors the main runner, except that an output file is mandatory:
+
+```bash
+./build/main/rarexsec-cnn-snapshot/rarexsec-cnn-snapshot \
+    config/catalogs/samples.json \
+    numi \
+    run1,run2 \
+    [optional-selection] \
+    output.root
+```
+
+The tool retains event identifiers, event weights, truth-channel assignments,
+and image tensors (detector, semantic, and ADC views). Any requested column that
+is missing from the configured samples is automatically skipped with a warning
+so that a consistent tree is written for every dataset.
+
 ## Snapshot output layout
 
 When an output file is requested the runner writes a structured ROOT file to
