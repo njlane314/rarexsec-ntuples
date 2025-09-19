@@ -15,15 +15,15 @@ ROOT::RDF::RNode ReconstructionProcessor::process(ROOT::RDF::RNode df, SampleOri
 
     auto quality_df = trigger_df.Define(
         "quality_event",
-        [st](float pe_beam, float pe_veto, int num_slices, float topo, int n_gen2, float x, float y, float z,
-             float contained_frac, float associated_frac) {
+        [st](float pe_beam, float pe_veto, int num_slices, float topo, float x, float y, float z, float contained_frac,
+             float associated_frac) {
             const bool dataset_gate = selection::passesDatasetGate(st, pe_beam, pe_veto, true);
-            const bool basic_reco = selection::isSingleGoodSlice(num_slices, topo, n_gen2);
+            const bool basic_reco = selection::isSingleGoodSlice(num_slices, topo);
             const bool fv = selection::isInFiducialVolumeWithGap(x, y, z);
             const bool slice_quality = selection::passesSliceQuality(contained_frac, associated_frac);
             return dataset_gate && basic_reco && fv && slice_quality;
         },
-        {"optical_filter_pe_beam", "optical_filter_pe_veto", "num_slices", "topological_score", "n_pfps_gen2",
+        {"optical_filter_pe_beam", "optical_filter_pe_veto", "num_slices", "topological_score",
          "reco_neutrino_vertex_sce_x", "reco_neutrino_vertex_sce_y", "reco_neutrino_vertex_sce_z",
          "contained_fraction", "slice_cluster_fraction"});
 

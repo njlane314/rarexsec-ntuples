@@ -6,6 +6,7 @@ set(rarexsec_processing_sources
     BlipProcessor.cpp
     SamplePipeline.cpp
     MuonSelectionProcessor.cpp
+    Selections.cpp
     PreselectionProcessor.cpp
     ReconstructionProcessor.cpp
     TruthChannelProcessor.cpp

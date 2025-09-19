@@ -15,7 +15,7 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
         {"optical_filter_pe_beam", "optical_filter_pe_veto", "software_trigger"});
 
     auto flash_df = pre_df.Define("pass_flash", selection::isSingleGoodSlice,
-                                  {"num_slices", "topological_score", "n_pfps_gen2"});
+                                  {"num_slices", "topological_score"});
 
     auto fv_df = flash_df.Define("pass_fv", selection::isInFiducialVolumeWithGap,
                                  {"reco_neutrino_vertex_sce_x", "reco_neutrino_vertex_sce_y",
