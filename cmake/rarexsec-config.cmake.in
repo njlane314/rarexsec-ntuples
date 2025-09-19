@@ -2,10 +2,7 @@
 
 include(CMakeFindDependencyMacro)
 find_dependency(ROOT REQUIRED COMPONENTS RIO Tree Hist ROOTDataFrame)
-
-if(@RAREXSEC_USE_SYSTEM_JSON@)
-    find_dependency(nlohmann_json @RAREXSEC_JSON_VERSION@ CONFIG)
-endif()
+find_dependency(nlohmann_json @RAREXSEC_JSON_VERSION@ CONFIG)
 
 set_and_check(rarexsec_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
 set(rarexsec_RUNTIME_DIR "@PACKAGE_CMAKE_INSTALL_BINDIR@")
