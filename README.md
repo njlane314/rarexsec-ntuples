@@ -38,15 +38,16 @@ cmake --build build
 
 The command-line entry point now lives under `apps/rarexsec-runner/`. After
 building, the executable is placed under `build/apps/rarexsec-runner/` by
-default. Invoke it with the configuration JSON, beam, periods, and ntuple
-location:
+default. Invoke it with the configuration JSON, beam, and periods. The runner
+infers the ntuple base directory from the configuration file (honouring either
+`ntuple_base_directory` or `samples.ntupledir`), and optional trailing arguments
+can be used to select events or snapshot the output:
 
 ```bash
 ./build/apps/rarexsec-runner/rarexsec-runner \
     config/catalogs/samples.json \
     numi \
     run1,run2 \
-    /path/to/ntuples \
     [optional-selection] \
     [optional-output.root]
 ```

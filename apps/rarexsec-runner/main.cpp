@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -23,17 +24,22 @@ std::vector<std::string> parsePeriods(const std::string &arg) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 5) {
-        std::cerr << "Usage: " << argv[0] << " <config.json> <beam> <periods> <ntuple_dir> [selection] [output.root]" << std::endl;
+    if (argc < 4) {
+        std::cerr << "Usage: " << argv[0]
+                  << " <config.json> <beam> <periods> [selection] [output.root]" << std::endl;
         return 1;
     }
 
     std::string config_path = argv[1];
     std::string beam = argv[2];
     std::string periods_arg = argv[3];
-    std::string ntuple_dir = argv[4];
-    std::string selection = argc > 5 ? argv[5] : std::string{};
-    std::string output = argc > 6 ? argv[6] : std::string{};
+    if (argc > 6) {
+        std::cerr << "Too many arguments provided" << std::endl;
+        return 1;
+    }
+
+    std::string selection = argc > 4 ? argv[4] : std::string{};
+    std::string output = argc > 5 ? argv[5] : std::string{};
 
     auto periods = parsePeriods(periods_arg);
     if (periods.empty()) {
@@ -49,8 +55,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    const auto &base_dir = registry.baseDirectory();
+    if (!base_dir || base_dir->empty()) {
+        std::cerr << "No ntuple directory configured in the JSON." << std::endl;
+        return 1;
+    }
+
     try {
-        analysis::AnalysisDataLoader loader(registry, analysis::VariableRegistry{}, beam, periods, ntuple_dir);
+        analysis::AnalysisDataLoader loader(registry, analysis::VariableRegistry{}, beam, periods, *base_dir);
         if (!output.empty()) {
             if (!selection.empty()) {
                 loader.snapshot(selection, output);

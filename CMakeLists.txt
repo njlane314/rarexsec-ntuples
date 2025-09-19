@@ -68,11 +68,17 @@ target_compile_features(rarexsec_processing PUBLIC cxx_std_17)
 
 add_executable(rarexsec-runner)
 
-target_sources(rarexsec-runner PRIVATE apps/rarexsec-runner/main.cpp)
+target_sources(rarexsec-runner PRIVATE
+    apps/rarexsec-runner/main.cpp
+)
 
 target_link_libraries(rarexsec-runner PRIVATE rarexsec_processing)
 
 target_compile_features(rarexsec-runner PRIVATE cxx_std_17)
+
+if(BUILD_TESTING)
+    # No runner-specific tests are defined yet.
+endif()
 
 set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/rarexsec)
 
