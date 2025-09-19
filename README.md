@@ -35,8 +35,12 @@ cmake --build build
 ```
 
 The default installation prefix is the repository-local `./install` directory.
-Override it either when configuring (`-DCMAKE_INSTALL_PREFIX=/path/to/prefix`)
-or at install time (`make install INSTALL_FLAGS="--prefix=/path/to/prefix"`).
+This avoids write-permission issues on shared systems where `/usr/local` is
+read-only. Override it either when configuring
+(`-DCMAKE_INSTALL_PREFIX=/path/to/prefix`) or at install time
+(`make install INSTALL_FLAGS="--prefix=/path/to/prefix"`). To explicitly keep a
+system prefix such as `/usr/local`, configure with
+`-DRAREXSEC_ALLOW_SYSTEM_INSTALL=ON`.
 
 ## Running the processing CLI
 

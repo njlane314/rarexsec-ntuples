@@ -2,9 +2,27 @@ cmake_minimum_required(VERSION 3.16)
 
 project(rarexsec_processing VERSION 0.1.0 LANGUAGES CXX)
 
+set(RAREXSEC_DEFAULT_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/install")
+option(RAREXSEC_ALLOW_SYSTEM_INSTALL "Allow installing into system prefixes such as /usr/local" OFF)
+
+set(_rarexsec_use_local_prefix OFF)
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/install" CACHE PATH "Installation prefix" FORCE)
+    set(_rarexsec_use_local_prefix ON)
+elseif(NOT RAREXSEC_ALLOW_SYSTEM_INSTALL)
+    get_filename_component(_rarexsec_prefix_abs "${CMAKE_INSTALL_PREFIX}" ABSOLUTE)
+    if(_rarexsec_prefix_abs STREQUAL "/usr/local")
+        set(_rarexsec_use_local_prefix ON)
+        message(WARNING "CMAKE_INSTALL_PREFIX was /usr/local; defaulting to ${RAREXSEC_DEFAULT_INSTALL_PREFIX}. "
+                        "Set RAREXSEC_ALLOW_SYSTEM_INSTALL=ON to keep the system prefix.")
+    endif()
 endif()
+
+if(_rarexsec_use_local_prefix)
+    set(CMAKE_INSTALL_PREFIX "${RAREXSEC_DEFAULT_INSTALL_PREFIX}" CACHE PATH "Installation prefix" FORCE)
+endif()
+
+unset(_rarexsec_use_local_prefix)
+unset(_rarexsec_prefix_abs)
 
 include(CTest)
 include(GNUInstallDirs)
