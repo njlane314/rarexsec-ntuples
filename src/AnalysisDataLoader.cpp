@@ -14,7 +14,6 @@
 #include <rarexsec/Logger.h>
 #include <rarexsec/BlipProcessor.h>
 #include <rarexsec/MuonSelectionProcessor.h>
-#include <rarexsec/NuMuCCSelectionProcessor.h>
 #include <rarexsec/PreselectionProcessor.h>
 #include <rarexsec/ReconstructionProcessor.h>
 #include <rarexsec/SampleTypes.h>
@@ -188,7 +187,7 @@ void AnalysisDataLoader::processRunConfig(const BeamPeriodConfiguration &rc) {
             std::make_unique<WeightProcessor>(sample_json, total_pot_, total_triggers_),
             std::make_unique<TruthChannelProcessor>(), std::make_unique<BlipProcessor>(),
             std::make_unique<MuonSelectionProcessor>(), std::make_unique<ReconstructionProcessor>(),
-            std::make_unique<PreselectionProcessor>(), std::make_unique<NuMuCCSelectionProcessor>());
+            std::make_unique<PreselectionProcessor>());
         processors_.push_back(std::move(pipeline));
 
         auto &processor = *processors_.back();
