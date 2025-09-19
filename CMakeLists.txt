@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(rarexsec_processing VERSION 0.1.0 LANGUAGES CXX)
+project(rarexsec VERSION 0.1.0 LANGUAGES CXX)
 
 set(RAREXSEC_DEFAULT_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/install")
 option(RAREXSEC_ALLOW_SYSTEM_INSTALL "Allow installing into system prefixes such as /usr/local" OFF)
@@ -52,88 +52,39 @@ else()
     set(RAREXSEC_USE_SYSTEM_JSON FALSE)
 endif()
 
-add_library(rarexsec_processing)
-add_library(rarexsec::processing ALIAS rarexsec_processing)
+set(RAREXSEC_EXPORT_SET rarexsecTargets)
 
-target_sources(rarexsec_processing
-    PRIVATE
-        src/AnalysisDataLoader.cpp
-        src/BlipProcessor.cpp
-        src/MuonSelectionProcessor.cpp
-        src/NuMuCCSelectionProcessor.cpp
-        src/PreselectionProcessor.cpp
-        src/ReconstructionProcessor.cpp
-        src/RunConfig.cpp
-        src/RunConfigLoader.cpp
-        src/RunConfigRegistry.cpp
-        src/SampleDefinition.cpp
-        src/TruthChannelProcessor.cpp
-        src/WeightProcessor.cpp
-)
-
-target_include_directories(rarexsec_processing
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(rarexsec_processing
-    PUBLIC
-        ROOT::RIO
-        ROOT::Tree
-        ROOT::Hist
-        ROOT::ROOTDataFrame
-        nlohmann_json::nlohmann_json
-)
-
-target_compile_features(rarexsec_processing PUBLIC cxx_std_17)
-
-add_executable(rarexsec-runner)
-
-target_sources(rarexsec-runner PRIVATE
-    apps/rarexsec-runner/main.cpp
-)
-
-target_link_libraries(rarexsec-runner PRIVATE rarexsec_processing)
-
-target_compile_features(rarexsec-runner PRIVATE cxx_std_17)
+add_subdirectory(libs)
+add_subdirectory(apps)
 
 if(BUILD_TESTING)
-    # No runner-specific tests are defined yet.
+    # No top-level tests are defined yet.
 endif()
 
 set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/rarexsec)
 
-install(TARGETS rarexsec_processing rarexsec-runner
-    EXPORT rarexsecTargets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-)
-
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-install(EXPORT rarexsecTargets
+install(
+    EXPORT ${RAREXSEC_EXPORT_SET}
     FILE rarexsecTargets.cmake
     NAMESPACE rarexsec::
     DESTINATION ${INSTALL_CONFIGDIR}
 )
 
 configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/rarexsecConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsecConfig.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/rarexsec-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config.cmake
     INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
-    PATH_VARS CMAKE_INSTALL_INCLUDEDIR
+    PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_BINDIR
 )
 
 write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsecConfigVersion.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config-version.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsecConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsecConfigVersion.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config-version.cmake
     DESTINATION ${INSTALL_CONFIGDIR}
 )

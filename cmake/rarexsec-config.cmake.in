@@ -1,0 +1,46 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(ROOT REQUIRED COMPONENTS RIO Tree Hist ROOTDataFrame)
+
+if(@RAREXSEC_USE_SYSTEM_JSON@)
+    find_dependency(nlohmann_json @RAREXSEC_JSON_VERSION@ CONFIG)
+endif()
+
+set_and_check(rarexsec_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+set(rarexsec_RUNTIME_DIR "@PACKAGE_CMAKE_INSTALL_BINDIR@")
+
+set(rarexsec_REGISTERED_COMPONENTS processing runner)
+set(rarexsec_COMPONENTS ${rarexsec_REGISTERED_COMPONENTS})
+
+include("${CMAKE_CURRENT_LIST_DIR}/rarexsecTargets.cmake")
+
+set(rarexsec_component_processing_targets rarexsec::processing)
+set(rarexsec_component_processing_type library)
+set(rarexsec_component_processing_description "Core data processing primitives for RareXSec analyses.")
+
+set(rarexsec_component_runner_targets rarexsec::runner)
+set(rarexsec_component_runner_type executable)
+set(rarexsec_component_runner_description "Command-line runner for executing RareXSec processing workflows.")
+
+foreach(_rarexsec_component IN LISTS rarexsec_REGISTERED_COMPONENTS)
+    set(rarexsec_${_rarexsec_component}_FOUND TRUE)
+endforeach()
+
+foreach(_requested_component IN LISTS rarexsec_FIND_COMPONENTS)
+    list(FIND rarexsec_REGISTERED_COMPONENTS "${_requested_component}" _rarexsec_index)
+    if(_rarexsec_index EQUAL -1)
+        set(rarexsec_${_requested_component}_FOUND FALSE)
+        list(APPEND rarexsec_NOT_FOUND_MESSAGE
+             "rarexsec package component '${_requested_component}' is not available."
+        )
+    endif()
+endforeach()
+
+if(rarexsec_NOT_FOUND_MESSAGE)
+    list(APPEND rarexsec_NOT_FOUND_MESSAGE
+        "Available components: ${rarexsec_REGISTERED_COMPONENTS}."
+    )
+endif()
+
+check_required_components(rarexsec)
