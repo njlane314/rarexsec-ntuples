@@ -24,11 +24,11 @@ constexpr float kGapMinZ = 675.f;
 constexpr float kGapMaxZ = 775.f;
 
 inline bool isInFiducialVolume(float x, float y, float z) {
-    return x > kMinX && x < kMaxX && y > kMinY && y < kMaxY && z > kMinZ && z < kMaxZ;
+    return x >= kMinX && x <= kMaxX && y >= kMinY && y <= kMaxY && z >= kMinZ && z <= kMaxZ;
 }
 
 inline bool isInFiducialVolumeWithGap(float x, float y, float z) {
-    return isInFiducialVolume(x, y, z) && (z < kGapMinZ || z > kGapMaxZ);
+    return isInFiducialVolume(x, y, z) && (z <= kGapMinZ || z >= kGapMaxZ);
 }
 
 inline bool passesDatasetGate(SampleOrigin origin, float pe_beam, float pe_veto, bool only_mc = false) {
@@ -42,25 +42,30 @@ inline bool passesDatasetGate(SampleOrigin origin, float pe_beam, float pe_veto,
     return gate_pass;
 }
 
-inline bool isSingleGoodSlice(int num_slices, float topological_score, int n_gen2) {
-    return num_slices == 1 && topological_score > 0.06f && n_gen2 > 1;
+inline bool isSingleGoodSlice(int num_slices, float topological_score) {
+    return num_slices == 1 && topological_score > 0.06f;
 }
 
 inline bool passesSliceQuality(float contained_fraction, float cluster_fraction) {
     return contained_fraction >= 0.7f && cluster_fraction >= 0.5f;
 }
 
-inline bool passesMuonId(float score, float llr, float length, float distance_to_vertex, unsigned generation) {
-    return score > 0.5f && llr > 0.2f && length > 10.0f && distance_to_vertex < 4.0f && generation == 2u;
+template <typename PlaneHitsU, typename PlaneHitsV, typename PlaneHitsY>
+inline bool passesMuonId(float score, float llr, float length, float distance_to_vertex, unsigned generation,
+                         PlaneHitsU hits_u, PlaneHitsV hits_v, PlaneHitsY hits_y) {
+    return score > 0.8f && llr > 0.2f && length > 10.0f && distance_to_vertex < 4.0f && generation == 2u && hits_u > 0 &&
+           hits_v > 0 && hits_y > 0;
 }
 
 inline bool isMuonTrackFiducial(float start_x, float start_y, float start_z, float end_x, float end_y, float end_z) {
     return isInFiducialVolume(start_x, start_y, start_z) && isInFiducialVolume(end_x, end_y, end_z);
 }
 
+template <typename PlaneHitsU, typename PlaneHitsV, typename PlaneHitsY>
 inline bool isMuonCandidate(float score, float llr, float length, float distance_to_vertex, unsigned generation,
-                            float start_x, float start_y, float start_z, float end_x, float end_y, float end_z) {
-    return passesMuonId(score, llr, length, distance_to_vertex, generation) &&
+                            float start_x, float start_y, float start_z, float end_x, float end_y, float end_z,
+                            PlaneHitsU hits_u, PlaneHitsV hits_v, PlaneHitsY hits_y) {
+    return passesMuonId(score, llr, length, distance_to_vertex, generation, hits_u, hits_v, hits_y) &&
            isMuonTrackFiducial(start_x, start_y, start_z, end_x, end_y, end_z);
 }
 

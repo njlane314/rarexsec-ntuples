@@ -7,6 +7,7 @@
 #include <rarexsec/SnapshotPipelineBuilder.h>
 #include <rarexsec/BeamPeriodConfigLoader.h>
 #include <rarexsec/Logger.h>
+#include <rarexsec/Selections.h>
 
 #include "RunnerParser.h"
 
@@ -134,7 +135,11 @@ int main(int argc, char **argv) {
         }
 
         const std::string output_file = options.output->string();
-        builder.snapshot(options.selection.value_or(""), output_file, columns);
+        const proc::FilterExpression selection = options.selection
+                                                   ? proc::FilterExpression{*options.selection}
+                                                   : proc::selection::muonNeutrinoChargedCurrentSelection();
+
+        builder.snapshot(selection, output_file, columns);
         proc::log::info("rarexsec-training-pool", "Training pool snapshot written to", output_file);
         std::cout << "Training pool generated at: " << output_file << std::endl;
     } catch (const std::exception &e) {

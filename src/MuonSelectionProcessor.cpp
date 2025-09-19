@@ -23,16 +23,19 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
         [](const ROOT::RVec<float> &scores, const ROOT::RVec<float> &llr, const ROOT::RVec<float> &lengths,
            const ROOT::RVec<float> &dists, const ROOT::RVec<float> &start_x, const ROOT::RVec<float> &start_y,
            const ROOT::RVec<float> &start_z, const ROOT::RVec<float> &end_x, const ROOT::RVec<float> &end_y,
-           const ROOT::RVec<float> &end_z, const ROOT::RVec<unsigned> &gens) {
+           const ROOT::RVec<float> &end_z, const ROOT::RVec<unsigned> &gens, const auto &plane_hits_u,
+           const auto &plane_hits_v, const auto &plane_hits_y) {
             ROOT::RVec<bool> mask(scores.size(), false);
             for (std::size_t i = 0; i < scores.size(); ++i) {
                 mask[i] = selection::isMuonCandidate(scores[i], llr[i], lengths[i], dists[i], gens[i], start_x[i],
-                                                     start_y[i], start_z[i], end_x[i], end_y[i], end_z[i]);
+                                                     start_y[i], start_z[i], end_x[i], end_y[i], end_z[i],
+                                                     plane_hits_u[i], plane_hits_v[i], plane_hits_y[i]);
             }
             return mask;
         },
         {"track_shower_scores", "trk_llr_pid_v", "track_length", "track_distance_to_vertex", "track_start_x",
-         "track_start_y", "track_start_z", "track_end_x", "track_end_y", "track_end_z", "pfp_generations"});
+         "track_start_y", "track_start_z", "track_end_x", "track_end_y", "track_end_z", "pfp_generations",
+         "pfp_num_plane_hits_U", "pfp_num_plane_hits_V", "pfp_num_plane_hits_Y"});
 }
 
 ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df) const {
