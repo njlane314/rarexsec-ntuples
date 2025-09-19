@@ -49,6 +49,41 @@ ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df
                              {"track_distance_to_vertex", "muon_mask"})
                      .Define("muon_pfp_generation_v", selection::filterByMask<unsigned>,
                              {"pfp_generations", "muon_mask"})
+                     .Define("muon_pfp_num_plane_hits_U_v", selection::filterByMask<int>,
+                             {"pfp_num_plane_hits_U", "muon_mask"})
+                     .Define("muon_pfp_num_plane_hits_V_v", selection::filterByMask<int>,
+                             {"pfp_num_plane_hits_V", "muon_mask"})
+                     .Define("muon_pfp_num_plane_hits_Y_v", selection::filterByMask<int>,
+                             {"pfp_num_plane_hits_Y", "muon_mask"})
+                     .Define(
+                         "has_muon_numu_cc",
+                         [](const ROOT::RVec<float> &scores, const ROOT::RVec<float> &llr,
+                            const ROOT::RVec<float> &lengths, const ROOT::RVec<float> &distances,
+                            const ROOT::RVec<float> &start_x, const ROOT::RVec<float> &start_y,
+                            const ROOT::RVec<float> &start_z, const ROOT::RVec<float> &end_x,
+                            const ROOT::RVec<float> &end_y, const ROOT::RVec<float> &end_z,
+                            const ROOT::RVec<unsigned> &generations, const ROOT::RVec<int> &hits_u,
+                            const ROOT::RVec<int> &hits_v, const ROOT::RVec<int> &hits_y) {
+                             const auto count = scores.size();
+                             for (std::size_t i = 0; i < count; ++i) {
+                                 if (scores[i] > 0.8f && llr[i] > 0.2f && lengths[i] > 10.f &&
+                                     distances[i] < 4.f && generations[i] == 2u && hits_u[i] > 0 && hits_v[i] > 0 &&
+                                     hits_y[i] > 0 && start_x[i] >= selection::kMinX && start_x[i] <= selection::kMaxX &&
+                                     end_x[i] >= selection::kMinX && end_x[i] <= selection::kMaxX &&
+                                     start_y[i] >= selection::kMinY && start_y[i] <= selection::kMaxY &&
+                                     end_y[i] >= selection::kMinY && end_y[i] <= selection::kMaxY &&
+                                     start_z[i] >= selection::kMinZ && start_z[i] <= selection::kMaxZ &&
+                                     end_z[i] >= selection::kMinZ && end_z[i] <= selection::kMaxZ) {
+                                     return true;
+                                 }
+                             }
+                             return false;
+                         },
+                         {"muon_trk_score_v", "muon_trk_llr_pid_v", "muon_trk_length_v", "muon_trk_distance_v",
+                          "muon_trk_start_x_v", "muon_trk_start_y_v", "muon_trk_start_z_v", "muon_trk_end_x_v",
+                          "muon_trk_end_y_v", "muon_trk_end_z_v", "muon_pfp_generation_v",
+                          "muon_pfp_num_plane_hits_U_v", "muon_pfp_num_plane_hits_V_v",
+                          "muon_pfp_num_plane_hits_Y_v"})
                      .Define(
                          "muon_track_costheta",
                              [](const ROOT::RVec<float> &theta, const ROOT::RVec<bool> &mask) {

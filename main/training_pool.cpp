@@ -7,6 +7,7 @@
 #include <rarexsec/AnalysisDataLoader.h>
 #include <rarexsec/BeamPeriodConfigLoader.h>
 #include <rarexsec/Logger.h>
+#include <rarexsec/Selections.h>
 
 #include "RunnerParser.h"
 
@@ -132,8 +133,18 @@ int main(int argc, char **argv) {
             return 1;
         }
 
+        auto selection_query = proc::selection::muonNeutrinoCCSelection(frames);
+        std::string filter_expression = selection_query.str();
+        if (options.selection && !options.selection->empty()) {
+            if (filter_expression.empty()) {
+                filter_expression = *options.selection;
+            } else {
+                filter_expression = "(" + filter_expression + ") && (" + *options.selection + ")";
+            }
+        }
+
         const std::string output_file = options.output->string();
-        loader.snapshot(options.selection.value_or(""), output_file, columns);
+        loader.snapshot(filter_expression, output_file, columns);
         proc::log::info("rarexsec-training-pool", "Training pool snapshot written to", output_file);
         std::cout << "Training pool generated at: " << output_file << std::endl;
     } catch (const std::exception &e) {
