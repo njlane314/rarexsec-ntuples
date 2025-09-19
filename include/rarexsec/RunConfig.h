@@ -1,5 +1,5 @@
-#ifndef BEAM_PERIOD_CONFIG_H
-#define BEAM_PERIOD_CONFIG_H
+#ifndef RUN_CONFIG_H
+#define RUN_CONFIG_H
 
 #include <string>
 
@@ -7,11 +7,11 @@
 
 namespace proc {
 
-class BeamPeriodConfig {
+class RunConfig {
   public:
     using json = nlohmann::json;
 
-    BeamPeriodConfig(const json &j, std::string beam_mode, std::string run_period);
+    RunConfig(const json &j, std::string beam_mode, std::string run_period);
 
     const std::string &beamMode() const noexcept;
     const std::string &runPeriod() const noexcept;
@@ -30,6 +30,6 @@ class BeamPeriodConfig {
     json samples_;
 };
 
-}
+} // namespace proc
 
-#endif
+#endif // RUN_CONFIG_H
