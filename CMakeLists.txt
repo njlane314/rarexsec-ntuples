@@ -54,7 +54,7 @@ if(RAREXSEC_BUILD_LIB)
 endif()
 
 if(RAREXSEC_BUILD_APPS)
-    add_subdirectory(main)
+    add_subdirectory(app)
 endif()
 
 if(BUILD_TESTING)
