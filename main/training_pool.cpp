@@ -84,7 +84,7 @@ std::vector<std::string> filterAvailableColumns(const proc::AnalysisDataLoader::
         if (present_everywhere) {
             available.push_back(column);
         } else {
-            proc::log::warn("rarexsec-training-pool-generator", "Omitting column", column,
+            proc::log::warn("rarexsec-training-pool", "Omitting column", column,
                             "because it is not available for every dataset");
         }
     }
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
     }
 
     if (!options.output) {
-        std::cerr << "An output file must be specified for the training pool generator." << std::endl;
+        std::cerr << "An output file must be specified for the training pool." << std::endl;
         return 1;
     }
 
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
 
         const std::string output_file = options.output->string();
         loader.snapshot(options.selection.value_or(""), output_file, columns);
-        proc::log::info("rarexsec-training-pool-generator", "Training pool snapshot written to", output_file);
+        proc::log::info("rarexsec-training-pool", "Training pool snapshot written to", output_file);
         std::cout << "Training pool generated at: " << output_file << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Processing failed: " << e.what() << std::endl;
