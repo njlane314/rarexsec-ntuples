@@ -41,7 +41,7 @@ find_package(nlohmann_json ${RAREXSEC_JSON_VERSION} CONFIG REQUIRED)
 set(RAREXSEC_EXPORT_SET rarexsecTargets)
 
 add_subdirectory(src)
-add_subdirectory(apps)
+add_subdirectory(main)
 
 if(BUILD_TESTING)
     # No top-level tests are defined yet.
