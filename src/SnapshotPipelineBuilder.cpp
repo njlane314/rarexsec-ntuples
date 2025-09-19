@@ -36,17 +36,46 @@ std::string sanitiseComponent(std::string value) {
     return sanitised;
 }
 
-std::vector<std::string> nominalDirectoryComponents(const proc::SampleKey &sample_key) {
-    return {"samples", sanitiseComponent(sample_key.str()), "nominal"};
+std::vector<std::string> baseDirectoryComponents(const proc::SampleKey &sample_key, const std::string &beam,
+                                                 const std::string &period, proc::SampleOrigin origin,
+                                                 const std::string &stage_name) {
+    std::vector<std::string> components;
+    components.reserve(7);
+    components.emplace_back("samples");
+    if (!beam.empty()) {
+        components.emplace_back(sanitiseComponent(beam));
+    }
+    if (!period.empty()) {
+        components.emplace_back(sanitiseComponent(period));
+    }
+    components.emplace_back(sanitiseComponent(proc::originToString(origin)));
+    if (!stage_name.empty()) {
+        components.emplace_back(sanitiseComponent(stage_name));
+    }
+    components.emplace_back(sanitiseComponent(sample_key.str()));
+    return components;
+}
+
+std::vector<std::string> nominalDirectoryComponents(const proc::SampleKey &sample_key, const std::string &beam,
+                                                    const std::string &period, proc::SampleOrigin origin,
+                                                    const std::string &stage_name) {
+    auto components = baseDirectoryComponents(sample_key, beam, period, origin, stage_name);
+    components.emplace_back("nominal");
+    return components;
 }
 
 std::vector<std::string> variationDirectoryComponents(const proc::SampleKey &base_key,
-                                                      const proc::VariationDescriptor &variation_def) {
+                                                      const proc::VariationDescriptor &variation_def,
+                                                      const std::string &beam, const std::string &period,
+                                                      proc::SampleOrigin origin, const std::string &stage_name) {
+    auto components = baseDirectoryComponents(base_key, beam, period, origin, stage_name);
+    components.emplace_back("variations");
     std::string label = variation_def.variation_label;
     if (label.empty()) {
         label = proc::variationToKey(variation_def.variation);
     }
-    return {"samples", sanitiseComponent(base_key.str()), "variations", sanitiseComponent(label)};
+    components.emplace_back(sanitiseComponent(label));
+    return components;
 }
 
 std::string componentsToPath(const std::vector<std::string> &components) {
@@ -60,12 +89,16 @@ std::string componentsToPath(const std::vector<std::string> &components) {
     return os.str();
 }
 
-std::string nominalTreePath(const proc::SampleKey &sample_key) {
-    return componentsToPath(nominalDirectoryComponents(sample_key)) + "/events";
+std::string nominalTreePath(const proc::SampleKey &sample_key, const std::string &beam, const std::string &period,
+                            proc::SampleOrigin origin, const std::string &stage_name) {
+    return componentsToPath(nominalDirectoryComponents(sample_key, beam, period, origin, stage_name)) + "/events";
 }
 
-std::string variationTreePath(const proc::SampleKey &base_key, const proc::VariationDescriptor &variation_def) {
-    return componentsToPath(variationDirectoryComponents(base_key, variation_def)) + "/events";
+std::string variationTreePath(const proc::SampleKey &base_key, const proc::VariationDescriptor &variation_def,
+                              const std::string &beam, const std::string &period, proc::SampleOrigin origin,
+                              const std::string &stage_name) {
+    return componentsToPath(variationDirectoryComponents(base_key, variation_def, beam, period, origin, stage_name)) +
+           "/events";
 }
 
 } // namespace
@@ -248,37 +281,43 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_fi
 
     for (auto const &[key, sample] : frames_) {
         const auto *rc = getRunConfigForSample(key);
-        beam = rc ? rc->beamMode() : std::string{};
-        run_period = rc ? rc->runPeriod() : std::string{};
+        const std::string sample_beam = rc ? rc->beamMode() : std::string{};
+        const std::string sample_period = rc ? rc->runPeriod() : std::string{};
+        const std::string &sample_stage = sample.stageName();
 
-        tree_path = nominalTreePath(key);
+        beam = sample_beam;
+        run_period = sample_period;
+        tree_path = nominalTreePath(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
         sample_key_value = key.str();
         dataset_id = sample.datasetId();
         relative_path = sample.relativePath();
         variation_label = "nominal";
-        stage_name = sample.stageName();
+        stage_name = sample_stage;
         origin_label = originToString(sample.sampleOrigin());
         sample_pot = sample.pot();
         sample_triggers = sample.triggers();
         samples_tree.Fill();
 
         for (const auto &variation_def : sample.variationDescriptors()) {
-            tree_path = variationTreePath(key, variation_def);
+            const auto *variation_rc = getRunConfigForSample(variation_def.sample_key);
+            const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
+            const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
+            const std::string &variation_stage =
+                variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
+
+            tree_path = variationTreePath(key, variation_def, variation_beam, variation_period,
+                                          sample.sampleOrigin(), variation_stage);
             sample_key_value = variation_def.sample_key.str();
             dataset_id = variation_def.dataset_id;
             relative_path = variation_def.relative_path;
             variation_label = variation_def.variation_label.empty() ? variationToKey(variation_def.variation)
                                                                     : variation_def.variation_label;
-            stage_name = variation_def.stage_name.empty() ? sample.stageName() : variation_def.stage_name;
+            stage_name = variation_stage;
             origin_label = originToString(sample.sampleOrigin());
             sample_pot = variation_def.pot;
             sample_triggers = variation_def.triggers;
-
-            const auto *variation_rc = getRunConfigForSample(variation_def.sample_key);
-            if (variation_rc) {
-                beam = variation_rc->beamMode();
-                run_period = variation_rc->runPeriod();
-            }
+            beam = variation_beam;
+            run_period = variation_period;
 
             samples_tree.Fill();
         }
@@ -337,9 +376,23 @@ void SnapshotPipelineBuilder::reorganiseSnapshotTrees(const std::string &output_
     };
 
     for (auto const &[key, sample] : frames_) {
-        moveTree(key.str(), nominalDirectoryComponents(key));
+        const auto *rc = getRunConfigForSample(key);
+        const std::string sample_beam = rc ? rc->beamMode() : std::string{};
+        const std::string sample_period = rc ? rc->runPeriod() : std::string{};
+        const std::string &sample_stage = sample.stageName();
+
+        moveTree(key.str(),
+                 nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage));
         for (const auto &variation_def : sample.variationDescriptors()) {
-            moveTree(variation_def.sample_key.str(), variationDirectoryComponents(key, variation_def));
+            const auto *variation_rc = getRunConfigForSample(variation_def.sample_key);
+            const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
+            const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
+            const std::string &variation_stage =
+                variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
+
+            moveTree(variation_def.sample_key.str(),
+                     variationDirectoryComponents(key, variation_def, variation_beam, variation_period,
+                                                  sample.sampleOrigin(), variation_stage));
         }
     }
 
