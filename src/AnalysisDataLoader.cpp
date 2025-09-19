@@ -105,7 +105,7 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
     opts.fCompressionLevel = 4;
     opts.fAutoFlush = 30 * 1024 * 1024;
 
-    const auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_name) mutable {
+    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_name) {
         if (!filter_expr.empty()) {
             df = df.Filter(filter_expr);
         }
