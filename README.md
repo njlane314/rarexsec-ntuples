@@ -68,10 +68,10 @@ relative file paths.
 - Supply an output file to snapshot the selected events. When omitted the tool
   prints the available branches for each configured sample.
 
-### Training pool generator
+### Training pool tool
 
 ```bash
-./build/main/rarexsec-training-pool-generator/rarexsec-training-pool-generator \
+./build/main/rarexsec-training-pool/rarexsec-training-pool \
     config/catalogues/samples.json \
     numi \
     run1,run2 \
@@ -79,7 +79,7 @@ relative file paths.
     output.root
 ```
 
-The training generator records the event identifiers, weights, truth-channel
+The training pool command records the event identifiers, weights, truth-channel
 labels, and CNN-friendly image tensors while retaining the same snapshot layout
 as the main runner.
 
