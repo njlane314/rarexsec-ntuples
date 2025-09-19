@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <rarexsec/AnalysisKey.h>
-#include <rarexsec/BeamPeriodConfigRegistry.h>
+#include <rarexsec/RunConfigRegistry.h>
 #include <rarexsec/EventProcessorStage.h>
 #include <rarexsec/FilterExpression.h>
 #include <rarexsec/SamplePipeline.h>
@@ -20,7 +20,7 @@ class SnapshotPipelineBuilder {
   public:
     using SampleFrameMap = std::map<SampleKey, SamplePipeline>;
 
-    SnapshotPipelineBuilder(const BeamPeriodConfigRegistry &run_config_registry, VariableRegistry variable_registry,
+    SnapshotPipelineBuilder(const RunConfigRegistry &run_config_registry, VariableRegistry variable_registry,
                             std::string beam_mode, std::vector<std::string> periods, std::string ntuple_base_dir,
                             bool blind = true);
 
@@ -29,7 +29,7 @@ class SnapshotPipelineBuilder {
     long getTotalTriggers() const noexcept { return total_triggers_; }
     const std::string &getBeam() const noexcept { return beam_; }
     const std::vector<std::string> &getPeriods() const noexcept { return periods_; }
-    const BeamPeriodConfig *getRunConfigForSample(const SampleKey &sk) const;
+    const RunConfig *getRunConfigForSample(const SampleKey &sk) const;
 
     void snapshot(const std::string &filter_expr, const std::string &output_file,
                   const std::vector<std::string> &columns = {}) const;
@@ -39,7 +39,7 @@ class SnapshotPipelineBuilder {
     void printAllBranches() const;
 
   private:
-    const BeamPeriodConfigRegistry &run_registry_;
+    const RunConfigRegistry &run_registry_;
     VariableRegistry var_registry_;
     std::string ntuple_base_directory_;
 
@@ -52,10 +52,10 @@ class SnapshotPipelineBuilder {
 
     SampleFrameMap frames_;
     std::vector<std::unique_ptr<EventProcessorStage>> processors_;
-    std::unordered_map<SampleKey, const BeamPeriodConfig *> run_config_cache_;
+    std::unordered_map<SampleKey, const RunConfig *> run_config_cache_;
 
     void loadAll();
-    void processRunConfig(const BeamPeriodConfig &rc);
+    void processRunConfig(const RunConfig &rc);
 
     template <typename Head, typename... Tail>
     std::unique_ptr<EventProcessorStage> chainProcessorStages(std::unique_ptr<Head> head,

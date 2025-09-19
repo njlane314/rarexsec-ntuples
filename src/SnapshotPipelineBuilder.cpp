@@ -72,7 +72,7 @@ std::string variationTreePath(const proc::SampleKey &base_key, const proc::Varia
 
 namespace proc {
 
-SnapshotPipelineBuilder::SnapshotPipelineBuilder(const BeamPeriodConfigRegistry &run_config_registry,
+SnapshotPipelineBuilder::SnapshotPipelineBuilder(const RunConfigRegistry &run_config_registry,
                                                  VariableRegistry variable_registry, std::string beam_mode,
                                                  std::vector<std::string> periods, std::string ntuple_base_dir,
                                                  bool blind)
@@ -87,7 +87,7 @@ SnapshotPipelineBuilder::SnapshotPipelineBuilder(const BeamPeriodConfigRegistry 
     loadAll();
 }
 
-const BeamPeriodConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey &sk) const {
+const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey &sk) const {
     auto it = run_config_cache_.find(sk);
     if (it != run_config_cache_.end()) {
         return it->second;
@@ -148,7 +148,7 @@ void SnapshotPipelineBuilder::printAllBranches() const {
 
 void SnapshotPipelineBuilder::loadAll() {
     const std::string ext_beam{"numi_ext"};
-    std::vector<const BeamPeriodConfig *> configs_to_process;
+    std::vector<const RunConfig *> configs_to_process;
     for (auto &period : periods_) {
         const auto &rc = run_registry_.get(beam_, period);
         total_pot_ += rc.nominalPot();
@@ -164,12 +164,12 @@ void SnapshotPipelineBuilder::loadAll() {
         }
     }
 
-    for (const BeamPeriodConfig *rc : configs_to_process) {
+    for (const RunConfig *rc : configs_to_process) {
         processRunConfig(*rc);
     }
 }
 
-void SnapshotPipelineBuilder::processRunConfig(const BeamPeriodConfig &rc) {
+void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
     processors_.reserve(processors_.size() + rc.sampleConfigs().size());
     for (auto &sample_json : rc.sampleConfigs()) {
         if (sample_json.contains("active") && !sample_json.at("active").get<bool>()) {

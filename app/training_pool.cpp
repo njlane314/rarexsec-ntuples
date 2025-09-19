@@ -5,7 +5,7 @@
 #include <vector>
 
 #include <rarexsec/SnapshotPipelineBuilder.h>
-#include <rarexsec/BeamPeriodConfigLoader.h>
+#include <rarexsec/RunConfigLoader.h>
 #include <rarexsec/Logger.h>
 #include <rarexsec/Selections.h>
 
@@ -109,9 +109,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    proc::BeamPeriodConfigRegistry registry;
+    proc::RunConfigRegistry registry;
     try {
-        proc::BeamPeriodConfigLoader::loadFromFile(options.config_path.string(), registry);
+        proc::RunConfigLoader::loadFromFile(options.config_path.string(), registry);
     } catch (const std::exception &e) {
         std::cerr << "Failed to load run configuration: " << e.what() << std::endl;
         return 1;
