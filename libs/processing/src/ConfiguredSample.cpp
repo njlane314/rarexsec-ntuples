@@ -1,6 +1,6 @@
-#include <rarexsec/processing/SampleDefinition.h>
+#include <rarexsec/processing/ConfiguredSample.h>
 
-#include <rarexsec/utils/Logger.h>
+#include <rarexsec/logging/Logger.h>
 
 namespace proc {
 namespace {
@@ -31,7 +31,7 @@ ROOT::RDF::RNode applyExclusionKeys(ROOT::RDF::RNode df, const std::vector<std::
             }
         }
         if (!found_key) {
-            log::warn("SampleDefinition::applyExclusionKeys", "missing exclusion key", exclusion_key);
+            log::warn("ConfiguredSample::applyExclusionKeys", "missing exclusion key", exclusion_key);
         }
     }
     return df;
@@ -39,7 +39,7 @@ ROOT::RDF::RNode applyExclusionKeys(ROOT::RDF::RNode df, const std::vector<std::
 
 }
 
-SampleDefinition::SampleDefinition(const nlohmann::json &sample_json, const nlohmann::json &all_samples_json,
+ConfiguredSample::ConfiguredSample(const nlohmann::json &sample_json, const nlohmann::json &all_samples_json,
                                    const std::string &base_dir, const VariableRegistry &var_reg,
                                    IEventProcessor &processor)
     : sample_key_{sample_json.at("sample_key").get<std::string>()},
@@ -72,37 +72,37 @@ SampleDefinition::SampleDefinition(const nlohmann::json &sample_json, const nloh
     }
 }
 
-void SampleDefinition::validateFiles(const std::string &base_dir) const {
+void ConfiguredSample::validateFiles(const std::string &base_dir) const {
     if (sample_key_.str().empty()) {
-        log::fatal("SampleDefinition::validateFiles", "empty sample key");
+        log::fatal("ConfiguredSample::validateFiles", "empty sample key");
     }
     if (sample_origin_ == SampleOrigin::kUnknown) {
-        log::fatal("SampleDefinition::validateFiles", "unknown sample origin", sample_key_.str());
+        log::fatal("ConfiguredSample::validateFiles", "unknown sample origin", sample_key_.str());
     }
     if ((sample_origin_ == SampleOrigin::kMonteCarlo || sample_origin_ == SampleOrigin::kDirt) && pot_ <= 0) {
-        log::fatal("SampleDefinition::validateFiles", "invalid pot for", sample_key_.str());
+        log::fatal("ConfiguredSample::validateFiles", "invalid pot for", sample_key_.str());
     }
     if (sample_origin_ == SampleOrigin::kData && triggers_ <= 0) {
-        log::fatal("SampleDefinition::validateFiles", "invalid triggers for", sample_key_.str());
+        log::fatal("ConfiguredSample::validateFiles", "invalid triggers for", sample_key_.str());
     }
     if (sample_origin_ != SampleOrigin::kData && rel_path_.empty()) {
-        log::fatal("SampleDefinition::validateFiles", "missing path for", sample_key_.str());
+        log::fatal("ConfiguredSample::validateFiles", "missing path for", sample_key_.str());
     }
     if (!rel_path_.empty()) {
         auto p = std::filesystem::path(base_dir) / rel_path_;
         if (!std::filesystem::exists(p)) {
-            log::fatal("SampleDefinition::validateFiles", "missing file", p.string());
+            log::fatal("ConfiguredSample::validateFiles", "missing file", p.string());
         }
     }
     for (auto &[variation, path] : var_paths_) {
         auto vp = std::filesystem::path(base_dir) / path;
         if (!std::filesystem::exists(vp)) {
-            log::fatal("SampleDefinition::validateFiles", "missing variation", path);
+            log::fatal("ConfiguredSample::validateFiles", "missing variation", path);
         }
     }
 }
 
-SampleVariation SampleDefinition::convertDetVarType(const std::string &s) const {
+SampleVariation ConfiguredSample::convertDetVarType(const std::string &s) const {
     if (s == "cv") return SampleVariation::kCV;
     if (s == "lyatt") return SampleVariation::kLYAttenuation;
     if (s == "lydown") return SampleVariation::kLYDown;
@@ -113,11 +113,11 @@ SampleVariation SampleDefinition::convertDetVarType(const std::string &s) const 
     if (s == "wiremodyz") return SampleVariation::kWireModYZ;
     if (s == "wiremodanglexz") return SampleVariation::kWireModAngleXZ;
     if (s == "wiremodangleyz") return SampleVariation::kWireModAngleYZ;
-    log::fatal("SampleDefinition::convertDetVarType", "invalid variation type", s);
+    log::fatal("ConfiguredSample::convertDetVarType", "invalid variation type", s);
     return SampleVariation::kUnknown;
 }
 
-ROOT::RDF::RNode SampleDefinition::makeDataFrame(const std::string &base_dir, const VariableRegistry &var_reg,
+ROOT::RDF::RNode ConfiguredSample::makeDataFrame(const std::string &base_dir, const VariableRegistry &var_reg,
                                                  IEventProcessor &processor, const std::string &rel_path,
                                                  const nlohmann::json &all_samples_json) {
     auto df = buildBaseDataFrame(base_dir, rel_path, processor, sample_origin_);

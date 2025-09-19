@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_PROCESSING_RUN_CONFIG_H
-#define RAREXSEC_PROCESSING_RUN_CONFIG_H
+#ifndef RAREXSEC_PROCESSING_BEAM_PERIOD_CONFIGURATION_H
+#define RAREXSEC_PROCESSING_BEAM_PERIOD_CONFIGURATION_H
 
 #include <string>
 
@@ -7,11 +7,11 @@
 
 namespace proc {
 
-class RunConfig {
+class BeamPeriodConfiguration {
   public:
     using json = nlohmann::json;
 
-    RunConfig(const json &j, std::string beam_mode, std::string run_period);
+    BeamPeriodConfiguration(const json &j, std::string beam_mode, std::string run_period);
 
     const std::string &beamMode() const noexcept;
     const std::string &runPeriod() const noexcept;

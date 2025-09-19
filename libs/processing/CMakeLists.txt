@@ -1,14 +1,14 @@
 set(rarexsec_processing_sources
     src/AnalysisDataLoader.cpp
+    src/BeamPeriodConfiguration.cpp
+    src/BeamPeriodConfigurationLoader.cpp
+    src/BeamPeriodConfigurationRegistry.cpp
     src/BlipProcessor.cpp
+    src/ConfiguredSample.cpp
     src/MuonSelectionProcessor.cpp
     src/NuMuCCSelectionProcessor.cpp
     src/PreselectionProcessor.cpp
     src/ReconstructionProcessor.cpp
-    src/RunConfig.cpp
-    src/RunConfigLoader.cpp
-    src/RunConfigRegistry.cpp
-    src/SampleDefinition.cpp
     src/TruthChannelProcessor.cpp
     src/WeightProcessor.cpp
 )

@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_UTILS_LOGGER_H
-#define RAREXSEC_UTILS_LOGGER_H
+#ifndef RAREXSEC_LOGGING_LOGGER_H
+#define RAREXSEC_LOGGING_LOGGER_H
 
 #include <chrono>
 #include <iomanip>
