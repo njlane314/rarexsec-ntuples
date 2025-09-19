@@ -32,45 +32,61 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(RAREXSEC_BUILD_LIB "Build the rarexsec processing library" ON)
+option(RAREXSEC_BUILD_APPS "Build the rarexsec executable tools" ON)
+
+if(RAREXSEC_BUILD_APPS AND NOT RAREXSEC_BUILD_LIB)
+    message(FATAL_ERROR "RAREXSEC_BUILD_APPS=ON requires RAREXSEC_BUILD_LIB=ON because the executables depend on the processing library.")
+endif()
+
 set(RAREXSEC_ROOT_COMPONENTS RIO Tree Hist ROOTDataFrame)
 set(RAREXSEC_JSON_VERSION 3.11.2)
 
-find_package(ROOT REQUIRED COMPONENTS ${RAREXSEC_ROOT_COMPONENTS})
-find_package(nlohmann_json ${RAREXSEC_JSON_VERSION} CONFIG REQUIRED)
+if(RAREXSEC_BUILD_LIB)
+    find_package(ROOT REQUIRED COMPONENTS ${RAREXSEC_ROOT_COMPONENTS})
+    find_package(nlohmann_json ${RAREXSEC_JSON_VERSION} CONFIG REQUIRED)
+endif()
 
 set(RAREXSEC_EXPORT_SET rarexsecTargets)
 
-add_subdirectory(src)
-add_subdirectory(main)
+if(RAREXSEC_BUILD_LIB)
+    add_subdirectory(src)
+endif()
+
+if(RAREXSEC_BUILD_APPS)
+    add_subdirectory(main)
+endif()
 
 if(BUILD_TESTING)
     # No top-level tests are defined yet.
 endif()
 
-set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/rarexsec)
+if(RAREXSEC_BUILD_LIB OR RAREXSEC_BUILD_APPS)
+    set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/rarexsec)
 
-install(
-    EXPORT ${RAREXSEC_EXPORT_SET}
-    FILE rarexsecTargets.cmake
-    NAMESPACE rarexsec::
-    DESTINATION ${INSTALL_CONFIGDIR}
-)
+    install(
+        EXPORT ${RAREXSEC_EXPORT_SET}
+        FILE rarexsecTargets.cmake
+        NAMESPACE rarexsec::
+        DESTINATION ${INSTALL_CONFIGDIR}
+    )
 
-configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/rarexsec-config.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config.cmake
-    INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
-    PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_BINDIR
-)
+    configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/rarexsec-config.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config.cmake
+        INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
+        PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_BINDIR
+    )
 
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config-version.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config-version.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
 
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config-version.cmake
-    DESTINATION ${INSTALL_CONFIGDIR}
-)
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/rarexsec-config-version.cmake
+        DESTINATION ${INSTALL_CONFIGDIR}
+    )
+endif()

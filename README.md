@@ -5,10 +5,18 @@
 ### Makefile shortcuts
 
 ```bash
-make             # configure into ./build and compile the library + runners
-make install     # install into ./install by default
-make test        # run ctest (a placeholder target is provided)
-make distclean   # remove the ./build directory entirely
+make                # configure into ./build and compile the library + runners
+make install        # install into ./install by default
+make test           # run ctest (a placeholder target is provided)
+make distclean      # remove the ./build directory entirely
+
+make build-lib      # configure ./build-lib with only the processing library
+make install-lib    # install artifacts from ./build-lib
+make distclean-lib  # remove the ./build-lib directory
+
+make build-apps     # configure ./build-apps with the library + executables
+make install-apps   # install artifacts from ./build-apps
+make distclean-apps # remove the ./build-apps directory
 ```
 
 ### Manual CMake invocation
@@ -18,6 +26,20 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 cmake --install build --prefix <path>  # optional custom prefix
 ```
+
+Component-specific toggles allow separate build directories when focusing on
+library or executable development:
+
+```bash
+# Library only
+cmake -S . -B build-lib -DRAREXSEC_BUILD_APPS=OFF
+
+# Executables together with the in-tree library (default behaviour)
+cmake -S . -B build-apps -DRAREXSEC_BUILD_LIB=ON -DRAREXSEC_BUILD_APPS=ON
+```
+
+`RAREXSEC_BUILD_APPS` requires the processing library because the runners link
+to `rarexsec::processing`.
 
 The default installation prefix is `./install`. To install into a system prefix
 such as `/usr/local`, either pass `-DCMAKE_INSTALL_PREFIX=/usr/local` when
