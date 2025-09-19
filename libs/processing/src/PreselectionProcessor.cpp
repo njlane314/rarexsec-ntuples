@@ -52,8 +52,8 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
 
     auto flash_df = pre_df.Define(
         "pass_flash",
-        [](int nslice, float topo, int n_gen2) { return nslice == 1 && topo > 0.06f && n_gen2 > 1; },
-        {"nslice", "topological_score", "n_pfps_gen2"});
+        [](int num_slices, float topo, int n_gen2) { return num_slices == 1 && topo > 0.06f && n_gen2 > 1; },
+        {"num_slices", "topological_score", "n_pfps_gen2"});
 
     auto fv_df = flash_df.Define(
         "pass_fv",

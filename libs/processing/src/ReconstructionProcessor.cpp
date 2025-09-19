@@ -45,10 +45,10 @@ ROOT::RDF::RNode ReconstructionProcessor::process(ROOT::RDF::RNode df, SampleOri
 
     auto quality_df = swtrig_df.Define(
         "quality_event",
-        [st](float pe_beam, float pe_veto, int nslices, float topo, int n_gen2, float x, float y, float z,
+        [st](float pe_beam, float pe_veto, int num_slices, float topo, int n_gen2, float x, float y, float z,
              float contained_frac, float associated_frac) {
             bool dataset_gate = (st == SampleOrigin::kMonteCarlo) ? (pe_beam > 0.f && pe_veto < 20.f) : true;
-            bool basic_reco = nslices == 1 && topo > 0.06f && n_gen2 > 1;
+            bool basic_reco = num_slices == 1 && topo > 0.06f && n_gen2 > 1;
             bool fv = x > 5.f && x < 251.f && y > -110.f && y < 110.f && z > 20.f && z < 986.f &&
                       (z < 675.f || z > 775.f);
             bool slice_quality = contained_frac >= 0.7f && associated_frac >= 0.5f;
