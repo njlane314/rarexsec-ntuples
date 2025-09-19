@@ -8,15 +8,28 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(GNUInstallDirs)
-include(FetchContent)
+find_package(nlohmann_json 3.11.2 CONFIG QUIET)
 
-FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.2
-)
-
-FetchContent_MakeAvailable(nlohmann_json)
+if(nlohmann_json_FOUND)
+    set(RAREXSEC_USE_SYSTEM_JSON TRUE)
+else()
+    set(RAREXSEC_USE_SYSTEM_JSON FALSE)
+    message(STATUS "nlohmann_json package not found. Fetching v3.11.2 from upstream.")
+    include(FetchContent)
+    FetchContent_Declare(
+        nlohmann_json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.11.2
+    )
+    FetchContent_GetProperties(nlohmann_json)
+    if(NOT nlohmann_json_POPULATED)
+        FetchContent_Populate(nlohmann_json)
+    endif()
+    add_library(nlohmann_json::nlohmann_json INTERFACE IMPORTED)
+    set_target_properties(nlohmann_json::nlohmann_json PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${nlohmann_json_SOURCE_DIR}/include"
+    )
+endif()
 
 find_package(ROOT REQUIRED COMPONENTS RIO Tree Hist ROOTDataFrame)
 
