@@ -1,4 +1,5 @@
 #include <rarexsec/processing/TruthChannelProcessor.h>
+#include <rarexsec/processing/selection/Catalog.h>
 
 #include <cmath>
 
@@ -67,9 +68,8 @@ ROOT::RDF::RNode TruthChannelProcessor::processNonMc(ROOT::RDF::RNode df, Sample
 ROOT::RDF::RNode TruthChannelProcessor::defineCounts(ROOT::RDF::RNode df) const {
     auto fid_df = df.Define(
         "in_fiducial",
-        "(neutrino_vertex_x > 5 && neutrino_vertex_x < 251) &&"
-        "(neutrino_vertex_y > -110 && neutrino_vertex_y < 110) &&"
-        "(neutrino_vertex_z > 20 && neutrino_vertex_z < 986)");
+        [](float x, float y, float z) { return selection::isInFiducialVolume(x, y, z); },
+        {"neutrino_vertex_x", "neutrino_vertex_y", "neutrino_vertex_z"});
 
     auto strange_df = fid_df.Define(
         "mc_n_strange",

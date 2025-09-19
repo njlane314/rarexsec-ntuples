@@ -1,4 +1,7 @@
 #include <rarexsec/processing/MuonSelectionProcessor.h>
+#include <rarexsec/processing/selection/Catalog.h>
+
+#include <cmath>
 
 namespace proc {
 
@@ -21,20 +24,10 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
            const ROOT::RVec<float> &dists, const ROOT::RVec<float> &start_x, const ROOT::RVec<float> &start_y,
            const ROOT::RVec<float> &start_z, const ROOT::RVec<float> &end_x, const ROOT::RVec<float> &end_y,
            const ROOT::RVec<float> &end_z, const ROOT::RVec<unsigned> &gens) {
-            ROOT::RVec<bool> mask(scores.size());
-            const float min_x = 5.f;
-            const float max_x = 251.f;
-            const float min_y = -110.f;
-            const float max_y = 110.f;
-            const float min_z = 20.f;
-            const float max_z = 986.f;
-            for (size_t i = 0; i < scores.size(); ++i) {
-                bool fid_start = start_x[i] > min_x && start_x[i] < max_x && start_y[i] > min_y && start_y[i] < max_y &&
-                                 start_z[i] > min_z && start_z[i] < max_z;
-                bool fid_end = end_x[i] > min_x && end_x[i] < max_x && end_y[i] > min_y && end_y[i] < max_y &&
-                               end_z[i] > min_z && end_z[i] < max_z;
-                mask[i] = (scores[i] > 0.5f && llr[i] > 0.2f && lengths[i] > 10.0f && dists[i] < 4.0f &&
-                           gens[i] == 2u && fid_start && fid_end);
+            ROOT::RVec<bool> mask(scores.size(), false);
+            for (std::size_t i = 0; i < scores.size(); ++i) {
+                mask[i] = selection::isMuonCandidate(scores[i], llr[i], lengths[i], dists[i], gens[i], start_x[i],
+                                                     start_y[i], start_z[i], end_x[i], end_y[i], end_z[i]);
             }
             return mask;
         },
@@ -43,51 +36,25 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
 }
 
 ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df) const {
-    auto filter_float = [](const ROOT::RVec<float> &vals, const ROOT::RVec<bool> &mask) {
-        ROOT::RVec<float> out;
-        out.reserve(vals.size());
-        for (size_t i = 0; i < vals.size(); ++i) {
-            if (mask[i]) {
-                out.push_back(vals[i]);
-            }
-        }
-        return out;
-    };
-
-    auto filter_uint = [](const ROOT::RVec<unsigned> &vals, const ROOT::RVec<bool> &mask) {
-        ROOT::RVec<unsigned> out;
-        out.reserve(vals.size());
-        for (size_t i = 0; i < vals.size(); ++i) {
-            if (mask[i]) {
-                out.push_back(vals[i]);
-            }
-        }
-        return out;
-    };
-
-    auto filter_costheta = [](const ROOT::RVec<float> &theta, const ROOT::RVec<bool> &mask) {
-        ROOT::RVec<float> out;
-        out.reserve(theta.size());
-        for (size_t i = 0; i < theta.size(); ++i) {
-            if (mask[i]) {
-                out.push_back(std::cos(theta[i]));
-            }
-        }
-        return out;
-    };
-
-    auto mu_df = df.Define("muon_trk_score_v", filter_float, {"track_shower_scores", "muon_mask"})
-                     .Define("muon_trk_llr_pid_v", filter_float, {"trk_llr_pid_v", "muon_mask"})
-                     .Define("muon_trk_start_x_v", filter_float, {"track_start_x", "muon_mask"})
-                     .Define("muon_trk_start_y_v", filter_float, {"track_start_y", "muon_mask"})
-                     .Define("muon_trk_start_z_v", filter_float, {"track_start_z", "muon_mask"})
-                     .Define("muon_trk_end_x_v", filter_float, {"track_end_x", "muon_mask"})
-                     .Define("muon_trk_end_y_v", filter_float, {"track_end_y", "muon_mask"})
-                     .Define("muon_trk_end_z_v", filter_float, {"track_end_z", "muon_mask"})
-                     .Define("muon_trk_length_v", filter_float, {"track_length", "muon_mask"})
-                     .Define("muon_trk_distance_v", filter_float, {"track_distance_to_vertex", "muon_mask"})
-                     .Define("muon_pfp_generation_v", filter_uint, {"pfp_generations", "muon_mask"})
-                     .Define("muon_track_costheta", filter_costheta, {"track_theta", "muon_mask"})
+    auto mu_df = df.Define("muon_trk_score_v", selection::filterByMask<float>, {"track_shower_scores", "muon_mask"})
+                     .Define("muon_trk_llr_pid_v", selection::filterByMask<float>, {"trk_llr_pid_v", "muon_mask"})
+                     .Define("muon_trk_start_x_v", selection::filterByMask<float>, {"track_start_x", "muon_mask"})
+                     .Define("muon_trk_start_y_v", selection::filterByMask<float>, {"track_start_y", "muon_mask"})
+                     .Define("muon_trk_start_z_v", selection::filterByMask<float>, {"track_start_z", "muon_mask"})
+                     .Define("muon_trk_end_x_v", selection::filterByMask<float>, {"track_end_x", "muon_mask"})
+                     .Define("muon_trk_end_y_v", selection::filterByMask<float>, {"track_end_y", "muon_mask"})
+                     .Define("muon_trk_end_z_v", selection::filterByMask<float>, {"track_end_z", "muon_mask"})
+                     .Define("muon_trk_length_v", selection::filterByMask<float>, {"track_length", "muon_mask"})
+                     .Define("muon_trk_distance_v", selection::filterByMask<float>,
+                             {"track_distance_to_vertex", "muon_mask"})
+                     .Define("muon_pfp_generation_v", selection::filterByMask<unsigned>,
+                             {"pfp_generations", "muon_mask"})
+                     .Define(
+                         "muon_track_costheta",
+                             [](const ROOT::RVec<float> &theta, const ROOT::RVec<bool> &mask) {
+                             return selection::transformByMask(theta, mask, [](float angle) { return std::cos(angle); });
+                         },
+                         {"track_theta", "muon_mask"})
                      .Define("n_muons_tot", "ROOT::VecOps::Sum(muon_mask)")
                      .Define("has_muon", "n_muons_tot > 0");
 
