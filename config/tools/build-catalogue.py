@@ -1,7 +1,6 @@
 from __future__ import annotations
 import argparse
 import concurrent.futures
-import hashlib
 import json
 import logging
 import os
@@ -57,13 +56,6 @@ def dataset_id(beamline: str, mode: str, run: str, origin: str, subset: str, sta
     if detvar:
         parts.append(detvar)
     return ".".join(parts)
-
-def sha7(path: Path) -> str:
-    h = hashlib.blake2s(digest_size=8)
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()[:7]
 
 def version_tag() -> str:
     return datetime.now(timezone.utc).strftime("v%Y%m%d")
@@ -419,7 +411,6 @@ def main() -> None:
         sys.exit("Refusing to run on a template. Copy it and set recipe_kind='instance'.")
 
     produced_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    sha = sha7(recipe_path)
 
     xml_paths = default_xmls()
     _entities, stage_outdirs = load_xml_context(xml_paths)
@@ -507,7 +498,6 @@ def main() -> None:
         "schema_version": SCHEMA_VERSION,
         "produced_at": produced_at,
         "source_recipe_path": str(recipe_path),
-        "source_recipe_hash": sha,
         "samples": {
             "ntupledir": cfg["ntuple_base_directory"],
             "beamlines": beamlines_out,

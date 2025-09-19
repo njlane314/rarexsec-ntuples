@@ -18,22 +18,6 @@ void BeamPeriodConfigLoader::loadFromJson(const nlohmann::json &data,
         }
     }
 
-    const auto assign_recipe_hash = [&registry](const nlohmann::json &section) {
-        if (section.contains("source_recipe_hash") && section.at("source_recipe_hash").is_string()) {
-            registry.setRecipeHash(section.at("source_recipe_hash").get<std::string>());
-            return true;
-        }
-        if (section.contains("recipe_hash") && section.at("recipe_hash").is_string()) {
-            registry.setRecipeHash(section.at("recipe_hash").get<std::string>());
-            return true;
-        }
-        return false;
-    };
-
-    if (!assign_recipe_hash(data) && data.contains("samples") && data.at("samples").is_object()) {
-        assign_recipe_hash(data.at("samples"));
-    }
-
     const nlohmann::json *run_configs_root = nullptr;
     if (data.contains("run_configurations")) {
         run_configs_root = &data.at("run_configurations");
