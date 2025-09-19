@@ -24,4 +24,8 @@ void BeamPeriodConfigurationRegistry::setBaseDirectory(std::string base_director
     base_directory_ = std::move(base_directory);
 }
 
+void BeamPeriodConfigurationRegistry::setRecipeHash(std::string recipe_hash) {
+    recipe_hash_ = std::move(recipe_hash);
+}
+
 }

@@ -42,88 +42,60 @@ ROOT::RDF::RNode applyExclusionKeys(ROOT::RDF::RNode df, const std::vector<std::
 ConfiguredSample::ConfiguredSample(const nlohmann::json &sample_json, const nlohmann::json &all_samples_json,
                                    const std::string &base_dir, const VariableRegistry &var_reg,
                                    IEventProcessor &processor)
-    : sample_key_{sample_json.at("sample_key").get<std::string>()},
-      sample_origin_{[&]() {
-          auto ts = sample_json.at("sample_type").get<std::string>();
-          return (ts == "mc"     ? SampleOrigin::kMonteCarlo
-                  : ts == "data" ? SampleOrigin::kData
-                  : ts == "ext"  ? SampleOrigin::kExternal
-                  : ts == "dirt" ? SampleOrigin::kDirt
-                                  : SampleOrigin::kUnknown);
-      }()},
-      rel_path_{sample_json.value("relative_path", "")},
-      truth_filter_{sample_json.value("truth_filter", "")},
-      truth_exclusions_{sample_json.value("exclusion_truth_filters", std::vector<std::string>{})},
-      pot_{sample_json.value("pot", 0.0)},
-      triggers_{sample_json.value("triggers", 0L)},
-      nominal_node_{makeDataFrame(base_dir, var_reg, processor, rel_path_, all_samples_json)} {
-    if (sample_json.contains("detector_variations")) {
-        for (auto &dv : sample_json.at("detector_variations")) {
-            SampleVariation type = convertDetVarType(dv.at("variation_type").get<std::string>());
-            var_paths_[type] = dv.at("relative_path").get<std::string>();
-        }
-    }
+    : definition_{SampleDefinition::fromJson(sample_json)},
+      nominal_node_{makeDataFrame(base_dir, var_reg, processor, definition_.relative_path, all_samples_json)} {
     validateFiles(base_dir);
-    if (sample_origin_ == SampleOrigin::kMonteCarlo) {
-        for (auto &[variation, path] : var_paths_) {
-            variation_nodes_.emplace(variation,
-                                     makeDataFrame(base_dir, var_reg, processor, path, all_samples_json));
+    if (definition_.origin == SampleOrigin::kMonteCarlo) {
+        for (const auto &variation_def : definition_.variations) {
+            variation_nodes_.emplace(variation_def.variation,
+                                     makeDataFrame(base_dir, var_reg, processor, variation_def.relative_path,
+                                                   all_samples_json));
         }
     }
 }
 
 void ConfiguredSample::validateFiles(const std::string &base_dir) const {
-    if (sample_key_.str().empty()) {
+    if (definition_.sample_key.str().empty()) {
         log::fatal("ConfiguredSample::validateFiles", "empty sample key");
     }
-    if (sample_origin_ == SampleOrigin::kUnknown) {
-        log::fatal("ConfiguredSample::validateFiles", "unknown sample origin", sample_key_.str());
+    if (definition_.origin == SampleOrigin::kUnknown) {
+        log::fatal("ConfiguredSample::validateFiles", "unknown sample origin", definition_.sample_key.str());
     }
-    if ((sample_origin_ == SampleOrigin::kMonteCarlo || sample_origin_ == SampleOrigin::kDirt) && pot_ <= 0) {
-        log::fatal("ConfiguredSample::validateFiles", "invalid pot for", sample_key_.str());
+    if ((definition_.origin == SampleOrigin::kMonteCarlo || definition_.origin == SampleOrigin::kDirt) &&
+        definition_.pot <= 0) {
+        log::fatal("ConfiguredSample::validateFiles", "invalid pot for", definition_.sample_key.str());
     }
-    if (sample_origin_ == SampleOrigin::kData && triggers_ <= 0) {
-        log::fatal("ConfiguredSample::validateFiles", "invalid triggers for", sample_key_.str());
+    if (definition_.origin == SampleOrigin::kData && definition_.triggers <= 0) {
+        log::fatal("ConfiguredSample::validateFiles", "invalid triggers for", definition_.sample_key.str());
     }
-    if (sample_origin_ != SampleOrigin::kData && rel_path_.empty()) {
-        log::fatal("ConfiguredSample::validateFiles", "missing path for", sample_key_.str());
+    if (definition_.origin != SampleOrigin::kData && definition_.relative_path.empty()) {
+        log::fatal("ConfiguredSample::validateFiles", "missing path for", definition_.sample_key.str());
     }
-    if (!rel_path_.empty()) {
-        auto p = std::filesystem::path(base_dir) / rel_path_;
+    if (!definition_.relative_path.empty()) {
+        auto p = std::filesystem::path(base_dir) / definition_.relative_path;
         if (!std::filesystem::exists(p)) {
             log::fatal("ConfiguredSample::validateFiles", "missing file", p.string());
         }
     }
-    for (auto &[variation, path] : var_paths_) {
-        auto vp = std::filesystem::path(base_dir) / path;
+    for (const auto &variation_def : definition_.variations) {
+        if (variation_def.variation == SampleVariation::kUnknown) {
+            log::fatal("ConfiguredSample::validateFiles", "invalid variation type for",
+                       variation_def.sample_key.str());
+        }
+        auto vp = std::filesystem::path(base_dir) / variation_def.relative_path;
         if (!std::filesystem::exists(vp)) {
-            log::fatal("ConfiguredSample::validateFiles", "missing variation", path);
+            log::fatal("ConfiguredSample::validateFiles", "missing variation", variation_def.relative_path);
         }
     }
-}
-
-SampleVariation ConfiguredSample::convertDetVarType(const std::string &s) const {
-    if (s == "cv") return SampleVariation::kCV;
-    if (s == "lyatt") return SampleVariation::kLYAttenuation;
-    if (s == "lydown") return SampleVariation::kLYDown;
-    if (s == "lyray") return SampleVariation::kLYRayleigh;
-    if (s == "recomb2") return SampleVariation::kRecomb2;
-    if (s == "sce") return SampleVariation::kSCE;
-    if (s == "wiremodx") return SampleVariation::kWireModX;
-    if (s == "wiremodyz") return SampleVariation::kWireModYZ;
-    if (s == "wiremodanglexz") return SampleVariation::kWireModAngleXZ;
-    if (s == "wiremodangleyz") return SampleVariation::kWireModAngleYZ;
-    log::fatal("ConfiguredSample::convertDetVarType", "invalid variation type", s);
-    return SampleVariation::kUnknown;
 }
 
 ROOT::RDF::RNode ConfiguredSample::makeDataFrame(const std::string &base_dir, const VariableRegistry &var_reg,
                                                  IEventProcessor &processor, const std::string &rel_path,
                                                  const nlohmann::json &all_samples_json) {
-    auto df = buildBaseDataFrame(base_dir, rel_path, processor, sample_origin_);
+    auto df = buildBaseDataFrame(base_dir, rel_path, processor, definition_.origin);
     (void)var_reg;
-    df = applyTruthFilters(df, truth_filter_);
-    df = applyExclusionKeys(df, truth_exclusions_, all_samples_json);
+    df = applyTruthFilters(df, definition_.truth_filter);
+    df = applyExclusionKeys(df, definition_.truth_exclusions, all_samples_json);
     return df;
 }
 
