@@ -99,17 +99,26 @@ Snapshots follow a consistent directory structure inside the output ROOT file:
 ```text
 snapshot.root
 ├── samples/
-│   └── <sample>/
-│       ├── nominal/
-│       │   └── events (TTree)
-│       └── variations/
-│           └── <variation>/
-│               └── events (TTree)
+│   └── <beam-mode>/
+│       └── <run-period>/
+│           └── <origin>/
+│               └── [<stage>/]
+│                   └── <sample>/
+│                       ├── nominal/
+│                       │   └── events (TTree)
+│                       └── variations/
+│                           └── <variation>/
+│                               └── events (TTree)
 └── meta/
     ├── totals (TTree)
     └── samples (TTree)
 ```
 
+- `beam-mode` and `run-period` ensure samples from different NuMI beam
+  configurations never clash.
+- The `origin` component reflects the catalogue entry (`mc`, `data`, `dirt`,
+  `ext`, ...). A `stage` directory is only inserted when the sample or
+  variation advertises a processing stage name.
 - `meta/totals` stores the integrated POT and trigger counts across all samples.
 - `meta/samples` lists each nominal and detector-variation dataset together with
   the resolved `tree_path`, dataset identifier, beam, and run period.
