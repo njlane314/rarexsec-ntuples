@@ -1,11 +1,11 @@
-#ifndef IEVENT_PROCESSOR_H
-#define IEVENT_PROCESSOR_H
+#ifndef RAREXSEC_PROCESSING_IEVENT_PROCESSOR_H
+#define RAREXSEC_PROCESSING_IEVENT_PROCESSOR_H
 
 #include <memory>
 
 #include "ROOT/RDataFrame.hxx"
 
-#include <rarexsec/data/SampleTypes.h>
+#include <rarexsec/processing/SampleTypes.h>
 
 namespace analysis {
 

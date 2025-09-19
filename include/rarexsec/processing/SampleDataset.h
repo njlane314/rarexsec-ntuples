@@ -1,12 +1,12 @@
-#ifndef SAMPLE_DATASET_H
-#define SAMPLE_DATASET_H
+#ifndef RAREXSEC_PROCESSING_SAMPLE_DATASET_H
+#define RAREXSEC_PROCESSING_SAMPLE_DATASET_H
 
 #include <unordered_map>
 
 #include "ROOT/RDataFrame.hxx"
 
-#include <rarexsec/core/AnalysisKey.h>
-#include <rarexsec/data/SampleTypes.h>
+#include <rarexsec/processing/AnalysisKey.h>
+#include <rarexsec/processing/SampleTypes.h>
 
 namespace analysis {
 

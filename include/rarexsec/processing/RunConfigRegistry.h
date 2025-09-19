@@ -1,32 +1,19 @@
-#ifndef RUN_CONFIG_REGISTRY_H
-#define RUN_CONFIG_REGISTRY_H
+#ifndef RAREXSEC_PROCESSING_RUN_CONFIG_REGISTRY_H
+#define RAREXSEC_PROCESSING_RUN_CONFIG_REGISTRY_H
 
 #include <map>
 #include <stdexcept>
 #include <string>
 
-#include <rarexsec/data/RunConfig.h>
+#include <rarexsec/processing/RunConfig.h>
 
 namespace analysis {
 
 class RunConfigRegistry {
   public:
-    void addConfig(RunConfig rc) {
-        auto key = rc.label();
-        if (configs_.count(key)) {
-            throw std::runtime_error("Duplicate RunConfig label: " + key);
-        }
-        configs_.emplace(std::move(key), std::move(rc));
-    }
+    void addConfig(RunConfig config);
 
-    const RunConfig &get(const std::string &beam, const std::string &period) const {
-        auto key = beam + ":" + period;
-        auto it = configs_.find(key);
-        if (it == configs_.end()) {
-            throw std::out_of_range("RunConfig not found: " + key);
-        }
-        return it->second;
-    }
+    const RunConfig &get(const std::string &beam, const std::string &period) const;
 
     const std::map<std::string, RunConfig> &all() const noexcept { return configs_; }
 
