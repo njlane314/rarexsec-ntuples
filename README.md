@@ -80,6 +80,22 @@ make interactive browsing and downstream analysis easier:
   as `sample_key`, `dataset_id`, and the resolved `tree_path` pointing to the
   location of the corresponding events tree.
 
+The overall layout looks like:
+
+```text
+snapshot.root
+├── samples/
+│   └── <sample>/
+│       ├── nominal/
+│       │   └── events (TTree)
+│       └── variations/
+│           └── <variation>/
+│               └── events (TTree)
+└── meta/
+    ├── totals (TTree)
+    └── samples (TTree)
+```
+
 The `<sample>` directory component is derived from the sample key in the recipe
 after applying the same character normalisation described above, so keys such as
 `mc_inclusive_run1_fhc` stay readable while more elaborate identifiers are still
