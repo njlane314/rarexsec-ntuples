@@ -1,4 +1,4 @@
-#include <rarexsec/BeamPeriodConfigurationLoader.h>
+#include <rarexsec/BeamPeriodConfigLoader.h>
 
 #include <fstream>
 #include <stdexcept>
@@ -7,8 +7,8 @@
 
 namespace proc {
 
-void BeamPeriodConfigurationLoader::loadFromJson(const nlohmann::json &data,
-                                                 BeamPeriodConfigurationRegistry &registry) {
+void BeamPeriodConfigLoader::loadFromJson(const nlohmann::json &data,
+                                          BeamPeriodConfigRegistry &registry) {
     if (data.contains("ntuple_base_directory") && data.at("ntuple_base_directory").is_string()) {
         registry.setBaseDirectory(data.at("ntuple_base_directory").get<std::string>());
     } else if (data.contains("samples")) {
@@ -45,29 +45,29 @@ void BeamPeriodConfigurationLoader::loadFromJson(const nlohmann::json &data,
 
     if (run_configs_root == nullptr) {
         throw std::runtime_error(
-            "BeamPeriodConfigurationLoader::loadFromJson: missing run configuration sections");
+            "BeamPeriodConfigLoader::loadFromJson: missing run configuration sections");
     }
 
     for (auto const &[beam, run_configs] : run_configs_root->items()) {
         for (auto const &[run_period, run_details] : run_configs.items()) {
-            BeamPeriodConfiguration config(run_details, beam, run_period);
+            BeamPeriodConfig config(run_details, beam, run_period);
             config.validate();
             registry.addConfig(std::move(config));
         }
     }
 }
 
-void BeamPeriodConfigurationLoader::loadFromFile(const std::string &config_path,
-                                                 BeamPeriodConfigurationRegistry &registry) {
+void BeamPeriodConfigLoader::loadFromFile(const std::string &config_path,
+                                          BeamPeriodConfigRegistry &registry) {
     std::ifstream f(config_path);
     if (!f.is_open()) {
-        log::fatal("BeamPeriodConfigurationLoader::loadFromFile", "Could not open config file", config_path);
+        log::fatal("BeamPeriodConfigLoader::loadFromFile", "Could not open config file", config_path);
     }
     try {
         nlohmann::json data = nlohmann::json::parse(f);
         loadFromJson(data, registry);
     } catch (const std::exception &e) {
-        log::fatal("BeamPeriodConfigurationLoader::loadFromFile", "Parsing error", e.what());
+        log::fatal("BeamPeriodConfigLoader::loadFromFile", "Parsing error", e.what());
     }
 }
 
