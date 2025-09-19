@@ -56,20 +56,35 @@ SampleDefinition::SampleDefinition(const nlohmann::json &sample_json, const nloh
       truth_exclusions_{sample_json.value("exclusion_truth_filters", std::vector<std::string>{})},
       pot_{sample_json.value("pot", 0.0)},
       triggers_{sample_json.value("triggers", 0L)},
+      dataset_id_{sample_json.value("dataset_id", std::string{})},
       nominal_node_{makeDataFrame(base_dir, var_reg, processor, rel_path_, all_samples_json)} {
     if (sample_json.contains("detector_variations")) {
-        for (auto &dv : sample_json.at("detector_variations")) {
-            SampleVariation type = convertDetVarType(dv.at("variation_type").get<std::string>());
-            var_paths_[type] = dv.at("relative_path").get<std::string>();
+        const auto &detvars = sample_json.at("detector_variations");
+        variation_samples_.reserve(detvars.size());
+        for (auto &dv : detvars) {
+            VariationSample variation_sample;
+            variation_sample.sample_key = SampleKey{dv.at("sample_key").get<std::string>()};
+
+            std::string variation_type = dv.value("variation_type", std::string{});
+            variation_sample.variation = convertDetVarType(variation_type);
+            if (!variation_type.empty()) {
+                variation_sample.variation_label = "detvar_" + variation_type;
+            }
+
+            variation_sample.dataset_id = dv.value("dataset_id", std::string{});
+            variation_sample.relative_path = dv.value("relative_path", std::string{});
+            variation_sample.pot = dv.value("pot", 0.0);
+            variation_sample.triggers = dv.value("triggers", 0L);
+
+            if (sample_origin_ == SampleOrigin::kMonteCarlo && !variation_sample.relative_path.empty()) {
+                variation_sample.node = makeDataFrame(base_dir, var_reg, processor, variation_sample.relative_path,
+                                                      all_samples_json);
+            }
+
+            variation_samples_.push_back(std::move(variation_sample));
         }
     }
     validateFiles(base_dir);
-    if (sample_origin_ == SampleOrigin::kMonteCarlo) {
-        for (auto &[variation, path] : var_paths_) {
-            variation_nodes_.emplace(variation,
-                                     makeDataFrame(base_dir, var_reg, processor, path, all_samples_json));
-        }
-    }
 }
 
 void SampleDefinition::validateFiles(const std::string &base_dir) const {
@@ -94,10 +109,14 @@ void SampleDefinition::validateFiles(const std::string &base_dir) const {
             log::fatal("SampleDefinition::validateFiles", "missing file", p.string());
         }
     }
-    for (auto &[variation, path] : var_paths_) {
-        auto vp = std::filesystem::path(base_dir) / path;
+    for (const auto &variation : variation_samples_) {
+        if (variation.relative_path.empty()) {
+            log::fatal("SampleDefinition::validateFiles", "missing variation path for",
+                      variation.sample_key.str());
+        }
+        auto vp = std::filesystem::path(base_dir) / variation.relative_path;
         if (!std::filesystem::exists(vp)) {
-            log::fatal("SampleDefinition::validateFiles", "missing variation", path);
+            log::fatal("SampleDefinition::validateFiles", "missing variation", variation.relative_path);
         }
     }
 }

@@ -18,6 +18,17 @@ namespace proc {
 
 class SampleDefinition {
   public:
+    struct VariationSample {
+        SampleKey sample_key;
+        SampleVariation variation;
+        std::string variation_label;
+        std::string dataset_id;
+        std::string relative_path;
+        double pot{0.0};
+        long triggers{0L};
+        ROOT::RDF::RNode node;
+    };
+
     SampleDefinition(const nlohmann::json &sample_json, const nlohmann::json &all_samples_json,
                      const std::string &base_dir, const VariableRegistry &var_reg, IEventProcessor &processor);
 
@@ -33,8 +44,9 @@ class SampleDefinition {
     const std::vector<std::string> &truthExclusions() const noexcept { return truth_exclusions_; }
     double pot() const noexcept { return pot_; }
     long triggers() const noexcept { return triggers_; }
+    const std::string &datasetId() const noexcept { return dataset_id_; }
     ROOT::RDF::RNode nominalNode() const { return nominal_node_; }
-    const std::map<SampleVariation, ROOT::RDF::RNode> &variationNodes() const noexcept { return variation_nodes_; }
+    const std::vector<VariationSample> &variationSamples() const noexcept { return variation_samples_; }
 
     void validateFiles(const std::string &base_dir) const;
 
@@ -46,9 +58,9 @@ class SampleDefinition {
     std::vector<std::string> truth_exclusions_;
     double pot_;
     long triggers_;
+    std::string dataset_id_;
     ROOT::RDF::RNode nominal_node_;
-    std::map<SampleVariation, ROOT::RDF::RNode> variation_nodes_;
-    std::map<SampleVariation, std::string> var_paths_;
+    std::vector<VariationSample> variation_samples_;
 
     SampleVariation convertDetVarType(const std::string &s) const;
     ROOT::RDF::RNode makeDataFrame(const std::string &base_dir, const VariableRegistry &var_reg,

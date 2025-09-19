@@ -21,9 +21,17 @@ class RunConfigRegistry {
     void setBaseDirectory(std::string base_directory);
     const std::optional<std::string> &baseDirectory() const noexcept { return base_directory_; }
 
+    void setCatalogJson(std::string catalog_json);
+    const std::optional<std::string> &catalogJson() const noexcept { return catalog_json_; }
+
+    void setCatalogHash(std::string catalog_hash);
+    const std::optional<std::string> &catalogHash() const noexcept { return catalog_hash_; }
+
   private:
     std::map<std::string, RunConfig> configs_;
     std::optional<std::string> base_directory_;
+    std::optional<std::string> catalog_json_;
+    std::optional<std::string> catalog_hash_;
 };
 
 }

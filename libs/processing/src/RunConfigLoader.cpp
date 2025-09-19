@@ -1,6 +1,7 @@
 #include <rarexsec/processing/RunConfigLoader.h>
 
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 
 #include <rarexsec/utils/Logger.h>
@@ -8,6 +9,16 @@
 namespace proc {
 
 void RunConfigLoader::loadFromJson(const nlohmann::json &data, RunConfigRegistry &registry) {
+    if (!registry.catalogJson()) {
+        registry.setCatalogJson(data.dump(4));
+    }
+
+    if (data.contains("source_recipe_hash") && data.at("source_recipe_hash").is_string()) {
+        registry.setCatalogHash(data.at("source_recipe_hash").get<std::string>());
+    } else if (data.contains("catalog_hash") && data.at("catalog_hash").is_string()) {
+        registry.setCatalogHash(data.at("catalog_hash").get<std::string>());
+    }
+
     if (data.contains("ntuple_base_directory") && data.at("ntuple_base_directory").is_string()) {
         registry.setBaseDirectory(data.at("ntuple_base_directory").get<std::string>());
     } else if (data.contains("samples")) {
@@ -44,8 +55,10 @@ void RunConfigLoader::loadFromFile(const std::string &config_path, RunConfigRegi
     if (!f.is_open()) {
         log::fatal("RunConfigLoader::loadFromFile", "Could not open config file", config_path);
     }
+    std::string config_text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    registry.setCatalogJson(config_text);
     try {
-        nlohmann::json data = nlohmann::json::parse(f);
+        nlohmann::json data = nlohmann::json::parse(config_text);
         loadFromJson(data, registry);
     } catch (const std::exception &e) {
         log::fatal("RunConfigLoader::loadFromFile", "Parsing error", e.what());

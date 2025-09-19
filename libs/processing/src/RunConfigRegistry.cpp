@@ -23,4 +23,12 @@ void RunConfigRegistry::setBaseDirectory(std::string base_directory) {
     base_directory_ = std::move(base_directory);
 }
 
+void RunConfigRegistry::setCatalogJson(std::string catalog_json) {
+    catalog_json_ = std::move(catalog_json);
+}
+
+void RunConfigRegistry::setCatalogHash(std::string catalog_hash) {
+    catalog_hash_ = std::move(catalog_hash);
+}
+
 }
