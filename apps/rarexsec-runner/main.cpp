@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -74,12 +75,25 @@ int main(int argc, char **argv) {
     try {
         proc::AnalysisDataLoader loader(registry, proc::VariableRegistry{}, beam, periods, *base_dir);
         if (!output.empty()) {
+            std::string resolved_output = output;
+            try {
+                namespace fs = std::filesystem;
+                fs::path path{output};
+                if (path.is_relative()) {
+                    path = fs::absolute(path);
+                }
+                resolved_output = path.lexically_normal().string();
+            } catch (const std::exception &) {
+                // If canonicalization fails we fall back to the user-provided path.
+            }
+
             if (!selection.empty()) {
                 loader.snapshot(selection, output);
             } else {
                 loader.snapshot("", output);
             }
-            proc::log::info("main", "Snapshot written to", output);
+            proc::log::info("main", "Snapshot written to", resolved_output);
+            std::cout << "ROOT snapshot saved to: " << resolved_output << std::endl;
         } else {
             loader.printAllBranches();
         }
