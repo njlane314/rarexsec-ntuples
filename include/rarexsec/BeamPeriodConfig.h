@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_BEAM_PERIOD_CONFIG_H
-#define RAREXSEC_BEAM_PERIOD_CONFIG_H
+#ifndef BEAM_PERIOD_CONFIG_H
+#define BEAM_PERIOD_CONFIG_H
 
 #include <string>
 

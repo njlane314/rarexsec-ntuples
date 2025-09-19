@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_WEIGHT_PROCESSOR_H
-#define RAREXSEC_WEIGHT_PROCESSOR_H
+#ifndef WEIGHT_PROCESSOR_H
+#define WEIGHT_PROCESSOR_H
 
 #include <nlohmann/json.hpp>
 

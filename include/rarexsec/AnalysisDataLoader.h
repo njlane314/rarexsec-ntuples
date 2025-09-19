@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_ANALYSIS_DATA_LOADER_H
-#define RAREXSEC_ANALYSIS_DATA_LOADER_H
+#ifndef ANALYSIS_DATA_LOADER_H
+#define ANALYSIS_DATA_LOADER_H
 
 #include <map>
 #include <memory>

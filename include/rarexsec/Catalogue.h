@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_SELECTION_CATALOGUE_H
-#define RAREXSEC_SELECTION_CATALOGUE_H
+#ifndef SELECTION_CATALOGUE_H
+#define SELECTION_CATALOGUE_H
 
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RVec.hxx"

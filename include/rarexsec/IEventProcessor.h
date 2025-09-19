@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_IEVENT_PROCESSOR_H
-#define RAREXSEC_IEVENT_PROCESSOR_H
+#ifndef IEVENT_PROCESSOR_H
+#define IEVENT_PROCESSOR_H
 
 #include <memory>
 

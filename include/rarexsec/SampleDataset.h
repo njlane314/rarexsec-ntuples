@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_SAMPLE_DATASET_H
-#define RAREXSEC_SAMPLE_DATASET_H
+#ifndef SAMPLE_DATASET_H
+#define SAMPLE_DATASET_H
 
 #include <unordered_map>
 

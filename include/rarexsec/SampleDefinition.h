@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_SAMPLE_DEFINITION_H
-#define RAREXSEC_SAMPLE_DEFINITION_H
+#ifndef SAMPLE_DEFINITION_H
+#define SAMPLE_DEFINITION_H
 
 #include <string>
 #include <utility>
