@@ -12,7 +12,7 @@
 
 namespace {
 
-const std::vector<std::string> &requestedImagingColumns() {
+const std::vector<std::string> &requestedTrainingPoolColumns() {
     static const std::vector<std::string> columns = {
         "run",
         "sub",
@@ -83,7 +83,7 @@ std::vector<std::string> filterAvailableColumns(const proc::AnalysisDataLoader::
         if (present_everywhere) {
             available.push_back(column);
         } else {
-            proc::log::warn("rarexsec-imaging-snapshot", "Omitting column", column,
+            proc::log::warn("rarexsec-training-pool-generator", "Omitting column", column,
                             "because it is not available for every dataset");
         }
     }
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
     }
 
     if (!options.output) {
-        std::cerr << "An output file must be specified for the imaging snapshot." << std::endl;
+        std::cerr << "An output file must be specified for the training pool generator." << std::endl;
         return 1;
     }
 
@@ -125,16 +125,16 @@ int main(int argc, char **argv) {
         proc::AnalysisDataLoader loader(registry, proc::VariableRegistry{}, options.beam, options.periods, *base_dir);
 
         const auto &frames = loader.getSampleFrames();
-        auto columns = filterAvailableColumns(frames, requestedImagingColumns());
+        auto columns = filterAvailableColumns(frames, requestedTrainingPoolColumns());
         if (columns.empty()) {
-            std::cerr << "None of the requested imaging columns are available for the selected samples." << std::endl;
+            std::cerr << "None of the requested training pool columns are available for the selected samples." << std::endl;
             return 1;
         }
 
         const std::string output_file = options.output->string();
         loader.snapshot(options.selection.value_or(""), output_file, columns);
-        proc::log::info("rarexsec-imaging-snapshot", "Snapshot written to", output_file);
-        std::cout << "Imaging snapshot saved to: " << output_file << std::endl;
+        proc::log::info("rarexsec-training-pool-generator", "Training pool snapshot written to", output_file);
+        std::cout << "Training pool generated at: " << output_file << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Processing failed: " << e.what() << std::endl;
         return 1;
