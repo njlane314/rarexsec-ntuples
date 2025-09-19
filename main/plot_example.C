@@ -1,4 +1,7 @@
-#include "main/ExampleInterface.h"
+// This ROOT macro is kept in the main directory as a lightweight example that can
+// be imitated when scripting custom snapshot exploration workflows.
+
+#include "ExampleInterface.h"
 
 #include "TCanvas.h"
 #include "TColor.h"
@@ -14,14 +17,14 @@ using rarexsec::examples::ExampleInterface;
 using rarexsec::examples::SampleSummary;
 
 //
-// Usage from the ROOT prompt:
-// root [0] .L macros/plot_snapshot.C
-// root [1] plot_snapshot("analysis_snapshot.root", "numi_run1", "reco_nu_energy")
+// Example usage from the ROOT prompt:
+// root [0] .L main/plot_example.C
+// root [1] plot_example("analysis_snapshot.root", "numi_run1", "reco_nu_energy")
 //
 
-void plot_snapshot(const char *file_name = "analysis_snapshot.root", const char *tree_name = "",
-                   const char *column = "reco_nu_energy", int bins = 40, double min = 0.0, double max = 4.0,
-                   const char *selection = "", const char *weight_column = "") {
+void plot_example(const char *file_name = "analysis_snapshot.root", const char *tree_name = "",
+                  const char *column = "reco_nu_energy", int bins = 40, double min = 0.0, double max = 4.0,
+                  const char *selection = "", const char *weight_column = "") {
     try {
         ExampleInterface snapshot(file_name);
 
@@ -83,6 +86,6 @@ void plot_snapshot(const char *file_name = "analysis_snapshot.root", const char 
         std::cout << "\nSaved canvas to " << output_name << std::endl;
 
     } catch (const std::exception &ex) {
-        Error("plot_snapshot", "%s", ex.what());
+        Error("plot_example", "%s", ex.what());
     }
 }
