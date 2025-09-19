@@ -6,7 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include <rarexsec/data/SampleTypes.h>
+#include <rarexsec/processing/SampleTypes.h>
 
 namespace analysis {
 
@@ -498,6 +498,6 @@ private:
   }
 };
 
-} // namespace analysis
+}
 
 #endif
