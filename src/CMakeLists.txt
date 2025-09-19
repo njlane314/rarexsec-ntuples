@@ -1,16 +1,16 @@
 set(rarexsec_processing_sources
-    src/AnalysisDataLoader.cpp
-    src/BeamPeriodConfiguration.cpp
-    src/BeamPeriodConfigurationLoader.cpp
-    src/BeamPeriodConfigurationRegistry.cpp
-    src/BlipProcessor.cpp
-    src/ConfiguredSample.cpp
-    src/MuonSelectionProcessor.cpp
-    src/NuMuCCSelectionProcessor.cpp
-    src/PreselectionProcessor.cpp
-    src/ReconstructionProcessor.cpp
-    src/TruthChannelProcessor.cpp
-    src/WeightProcessor.cpp
+    processing/AnalysisDataLoader.cpp
+    processing/BeamPeriodConfiguration.cpp
+    processing/BeamPeriodConfigurationLoader.cpp
+    processing/BeamPeriodConfigurationRegistry.cpp
+    processing/BlipProcessor.cpp
+    processing/ConfiguredSample.cpp
+    processing/MuonSelectionProcessor.cpp
+    processing/NuMuCCSelectionProcessor.cpp
+    processing/PreselectionProcessor.cpp
+    processing/ReconstructionProcessor.cpp
+    processing/TruthChannelProcessor.cpp
+    processing/WeightProcessor.cpp
 )
 
 add_library(rarexsec_processing)
@@ -23,8 +23,8 @@ target_sources(rarexsec_processing
 
 target_include_directories(rarexsec_processing
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_link_libraries(rarexsec_processing
@@ -49,6 +49,6 @@ install(
 )
 
 install(
-    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+    DIRECTORY ${PROJECT_SOURCE_DIR}/include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
