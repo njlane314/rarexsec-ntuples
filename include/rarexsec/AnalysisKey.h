@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_PROCESSING_ANALYSIS_KEY_H
-#define RAREXSEC_PROCESSING_ANALYSIS_KEY_H
+#ifndef RAREXSEC_ANALYSIS_KEY_H
+#define RAREXSEC_ANALYSIS_KEY_H
 
 #include <cstddef>
 #include <functional>
