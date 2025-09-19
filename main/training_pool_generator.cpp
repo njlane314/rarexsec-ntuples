@@ -5,7 +5,7 @@
 #include <vector>
 
 #include <rarexsec/AnalysisDataLoader.h>
-#include <rarexsec/BeamPeriodConfigurationLoader.h>
+#include <rarexsec/BeamPeriodConfigLoader.h>
 #include <rarexsec/Logger.h>
 
 #include "RunnerParser.h"
@@ -107,9 +107,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    proc::BeamPeriodConfigurationRegistry registry;
+    proc::BeamPeriodConfigRegistry registry;
     try {
-        proc::BeamPeriodConfigurationLoader::loadFromFile(options.config_path.string(), registry);
+        proc::BeamPeriodConfigLoader::loadFromFile(options.config_path.string(), registry);
     } catch (const std::exception &e) {
         std::cerr << "Failed to load run configuration: " << e.what() << std::endl;
         return 1;
