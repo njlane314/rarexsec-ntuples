@@ -44,15 +44,14 @@ system prefix such as `/usr/local`, configure with
 
 ## Running the processing CLI
 
-The command-line entry point now lives under `apps/rarexsec-runner/`. After
-building, the executable is placed under `build/apps/rarexsec-runner/` by
-default. Invoke it with the configuration JSON, beam, and periods. The runner
+The command-line entry point now lives under `main/`. After
+building, the executable is placed under `build/main/rarexsec-runner/` by default. Invoke it with the configuration JSON, beam, and periods. The runner
 infers the ntuple base directory from the configuration file (honouring either
 `ntuple_base_directory` or `samples.ntupledir`), and optional trailing arguments
 can be used to select events or snapshot the output:
 
 ```bash
-./build/apps/rarexsec-runner/rarexsec-runner \
+./build/main/rarexsec-runner/rarexsec-runner \
     config/catalogs/samples.json \
     numi \
     run1,run2 \
