@@ -3,7 +3,6 @@
     "schema_version": "1.0",
     "produced_at": "2025-09-11T23:11:40+00:00",
     "source_recipe_path": "config/analysis-recipe.json",
-    "source_recipe_hash": "8b0e9b0",
     "samples": {
         "ntupledir": "/exp/uboone/data/users/nlane/ntuples",
         "beamlines": {

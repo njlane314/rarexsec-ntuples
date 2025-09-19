@@ -1,54 +1,57 @@
 # rarexsec-ntuples
 
-This repository provides a small processing library and a command-line runner
-for assembling ROOT `RDataFrame` pipelines driven by configuration JSON files.
+`rarexsec-ntuples` provides a lightweight C++17 library and CLI tools for
+assembling ROOT `RDataFrame` pipelines that are driven by JSON catalogues of
+beam periods and samples.
 
-## Build requirements
+## Requirements
 
-The project relies on the following external dependencies:
-
-- A C++17 toolchain (GCC 9+, Clang 10+, or compatible)
+- GCC 9+/Clang 10+ (or any C++17-capable toolchain)
 - [CMake](https://cmake.org/) 3.16 or newer
 - [ROOT](https://root.cern/) with the `RIO`, `Tree`, `Hist`, and `ROOTDataFrame`
-  components available on your `CMAKE_PREFIX_PATH`
+  components on your `CMAKE_PREFIX_PATH`
+- The header-only [nlohmann/json](https://github.com/nlohmann/json) dependency
+  is fetched automatically during configuration
 
-The header-only [nlohmann/json](https://github.com/nlohmann/json) dependency is
-fetched automatically at configure time via CMake's `FetchContent` module.
+## Build
 
-## Building
-
-You can drive the build with the provided Makefile, which wraps the standard
-CMake workflow:
+### Makefile shortcuts
 
 ```bash
-make                # configure (in ./build) and compile the library and runner
-make test           # invoke ctest (no tests are defined yet, but the target exists)
-make install        # install into ./install (or override via CMAKE_INSTALL_PREFIX)
-make distclean      # remove the build directory completely
+make             # configure into ./build and compile the library + runners
+make install     # install into ./install by default
+make test        # run ctest (a placeholder target is provided)
+make distclean   # remove the ./build directory entirely
 ```
 
-Alternatively you can call CMake directly:
+### Manual CMake invocation
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+cmake --install build --prefix <path>  # optional custom prefix
 ```
 
-The default installation prefix is the repository-local `./install` directory.
-This avoids write-permission issues on shared systems where `/usr/local` is
-read-only. Override it either when configuring
-(`-DCMAKE_INSTALL_PREFIX=/path/to/prefix`) or at install time
-(`make install INSTALL_FLAGS="--prefix=/path/to/prefix"`). To explicitly keep a
-system prefix such as `/usr/local`, configure with
-`-DRAREXSEC_ALLOW_SYSTEM_INSTALL=ON`.
+The default installation prefix is `./install`. To install into a system prefix
+such as `/usr/local`, either pass `-DCMAKE_INSTALL_PREFIX=/usr/local` when
+configuring or set `-DRAREXSEC_ALLOW_SYSTEM_INSTALL=ON`.
 
-## Running the processing CLI
+## Generate a sample catalogue
 
-The command-line entry point now lives under `main/`. After
-building, the executable is placed under `build/main/rarexsec-runner/` by default. Invoke it with the configuration JSON, beam, and periods. The runner
-infers the ntuple base directory from the configuration file (honouring either
-`ntuple_base_directory` or `samples.ntupledir`), and optional trailing arguments
-can be used to select events or snapshot the output:
+The helper script converts an analysis recipe into the catalogue format expected
+by the runners and copies/links the required ntuples:
+
+```bash
+python config/tools/build-catalogue.py --recipe config/analysis-recipe.json
+```
+
+The resulting JSON is written to `config/catalogues/samples.json` by default and
+includes the resolved dataset identifiers, POT totals, trigger counts, and
+relative file paths.
+
+## Run the command-line tools
+
+### Event processing runner
 
 ```bash
 ./build/main/rarexsec-runner/rarexsec-runner \
@@ -59,49 +62,30 @@ can be used to select events or snapshot the output:
     [optional-output.root]
 ```
 
-If an output file is provided the selected events are snapshotted into that ROOT
-file; otherwise the available branches for the configured samples are printed to
-standard output.
+- Arguments 1–3 select the catalogue, beam, and comma-separated run periods.
+- Provide a filter expression to `optional-selection` to trim events with
+  `RDataFrame::Filter` syntax.
+- Supply an output file to snapshot the selected events. When omitted the tool
+  prints the available branches for each configured sample.
 
 ### Training pool generator
 
-When preparing training pools for convolutional neural network workflows, the
-`rarexsec-training-pool-generator` executable provides the same structured output
-layout as the general runner but restricts the stored branches to a
-CNN-friendly subset. Usage mirrors the main runner, except that an output file
-is mandatory:
-
 ```bash
 ./build/main/rarexsec-training-pool-generator/rarexsec-training-pool-generator \
-    config/catalogs/samples.json \
+    config/catalogues/samples.json \
     numi \
     run1,run2 \
     [optional-selection] \
     output.root
 ```
 
-The tool retains event identifiers, event weights, truth-channel assignments,
-and image tensors (detector, semantic, and ADC views). Any requested column that
-is missing from the configured samples is automatically skipped with a warning
-so that a consistent training pool tree is written for every dataset.
+The training generator records the event identifiers, weights, truth-channel
+labels, and CNN-friendly image tensors while retaining the same snapshot layout
+as the main runner.
 
-## Snapshot output layout
+## Snapshot layout
 
-When an output file is requested the runner writes a structured ROOT file to
-make interactive browsing and downstream analysis easier:
-
-- `samples/<sample>/nominal/events` contains the nominal event tree for each
-  configured sample.
-- `samples/<sample>/variations/<variation>/events` holds detector systematics
-  associated with that sample. Variation names are normalised so that any
-  characters outside `[A-Za-z0-9_-]` are replaced with underscores.
-- `meta/totals` captures the integrated POT and trigger counts across all
-  processed samples.
-- `meta/samples` summarises each nominal and variation entry with branches such
-  as `sample_key`, `dataset_id`, and the resolved `tree_path` pointing to the
-  location of the corresponding events tree.
-
-The overall layout looks like:
+Snapshots follow a consistent directory structure inside the output ROOT file:
 
 ```text
 snapshot.root
@@ -117,14 +101,15 @@ snapshot.root
     └── samples (TTree)
 ```
 
-The `<sample>` directory component is derived from the sample key in the recipe
-after applying the same character normalisation described above, so keys such as
-`mc_inclusive_run1_fhc` stay readable while more elaborate identifiers are still
-legal ROOT directory names.
+- `meta/totals` stores the integrated POT and trigger counts across all samples.
+- `meta/samples` lists each nominal and detector-variation dataset together with
+  the resolved `tree_path`, dataset identifier, beam, and run period.
 
-To explore the output interactively you can drop the following helper macro into
-`rarexsec_snapshot_example.C` and run it from a ROOT session. It loops over the
-metadata tree, grabs each nominal tree, and prints its entry count:
+## Explore snapshot metadata with ROOT
+
+The snippet below iterates over the metadata summary, loads each nominal event
+TTree, and prints the entry counts. Save it as `rarexsec_snapshot_example.C` and
+run `root -l rarexsec_snapshot_example.C` to execute the helper:
 
 ```cpp
 #include <iostream>
@@ -154,7 +139,7 @@ void rarexsec_snapshot_example(const char *filename = "snapshot.root") {
     for (Long64_t entry = 0; entry < meta->GetEntries(); ++entry) {
         meta->GetEntry(entry);
         if (tree_path.find("/nominal/") == std::string::npos) {
-            continue; // only inspect the nominal samples in this example
+            continue;
         }
 
         auto *events = static_cast<TTree *>(input.Get(tree_path.c_str()));
@@ -168,7 +153,5 @@ void rarexsec_snapshot_example(const char *filename = "snapshot.root") {
 }
 ```
 
-The macro demonstrates how to rely on the metadata summary rather than hard
-coding paths; more elaborate scripts can branch on `variation` or `origin` to
-automate detector variation studies.
-
+Use the same pattern to access detector variations (`variation` branch) or to
+aggregate POT across selected subsets.

@@ -3,7 +3,6 @@
 #include "Compression.h"
 #include "TDirectory.h"
 #include "TFile.h"
-#include "TObjString.h"
 #include "TROOT.h"
 #include "TTree.h"
 #include "ROOT/RDataFrame.hxx"
@@ -217,13 +216,6 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         log::fatal("AnalysisDataLoader::writeSnapshotMetadata", "Could not create meta directory");
     }
     meta_dir->cd();
-
-    std::string recipe_hash;
-    if (const auto &hash = run_registry_.recipeHash()) {
-        recipe_hash = *hash;
-    }
-    TObjString hash_obj(recipe_hash.c_str());
-    hash_obj.Write("recipe_hash", TObject::kOverwrite);
 
     TTree totals_tree("totals", "Exposure totals");
     double total_pot = total_pot_;
