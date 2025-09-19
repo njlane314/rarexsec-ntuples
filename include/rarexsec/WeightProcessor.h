@@ -3,8 +3,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include <rarexsec/processing/IEventProcessor.h>
-#include <rarexsec/processing/SampleTypes.h>
+#include <rarexsec/IEventProcessor.h>
+#include <rarexsec/SampleTypes.h>
 
 namespace proc {
 

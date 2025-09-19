@@ -1,9 +1,9 @@
-#include <rarexsec/processing/BeamPeriodConfigurationLoader.h>
+#include <rarexsec/BeamPeriodConfigurationLoader.h>
 
 #include <fstream>
 #include <stdexcept>
 
-#include <rarexsec/logging/Logger.h>
+#include <rarexsec/Logger.h>
 
 namespace proc {
 

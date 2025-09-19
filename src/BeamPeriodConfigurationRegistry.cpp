@@ -1,4 +1,4 @@
-#include <rarexsec/processing/BeamPeriodConfigurationRegistry.h>
+#include <rarexsec/BeamPeriodConfigurationRegistry.h>
 
 namespace proc {
 

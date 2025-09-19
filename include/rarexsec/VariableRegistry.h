@@ -6,7 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include <rarexsec/processing/SampleTypes.h>
+#include <rarexsec/SampleTypes.h>
 
 namespace proc {
 

@@ -7,12 +7,12 @@
 #include <unordered_map>
 #include <vector>
 
-#include <rarexsec/processing/AnalysisKey.h>
-#include <rarexsec/processing/BeamPeriodConfigurationRegistry.h>
-#include <rarexsec/processing/ConfiguredSample.h>
-#include <rarexsec/processing/IEventProcessor.h>
-#include <rarexsec/processing/SelectionQuery.h>
-#include <rarexsec/processing/VariableRegistry.h>
+#include <rarexsec/AnalysisKey.h>
+#include <rarexsec/BeamPeriodConfigurationRegistry.h>
+#include <rarexsec/ConfiguredSample.h>
+#include <rarexsec/IEventProcessor.h>
+#include <rarexsec/SelectionQuery.h>
+#include <rarexsec/VariableRegistry.h>
 
 namespace proc {
 

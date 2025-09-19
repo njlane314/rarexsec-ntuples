@@ -1,5 +1,5 @@
-#include <rarexsec/processing/TruthChannelProcessor.h>
-#include <rarexsec/processing/selection/Catalog.h>
+#include <rarexsec/TruthChannelProcessor.h>
+#include <rarexsec/Catalog.h>
 
 #include <cmath>
 

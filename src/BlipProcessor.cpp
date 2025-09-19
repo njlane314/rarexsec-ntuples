@@ -1,4 +1,4 @@
-#include <rarexsec/processing/BlipProcessor.h>
+#include <rarexsec/BlipProcessor.h>
 
 namespace proc {
 

@@ -1,7 +1,7 @@
 #ifndef RAREXSEC_PROCESSING_PRESELECTION_PROCESSOR_H
 #define RAREXSEC_PROCESSING_PRESELECTION_PROCESSOR_H
 
-#include <rarexsec/processing/IEventProcessor.h>
+#include <rarexsec/IEventProcessor.h>
 
 namespace proc {
 

@@ -3,7 +3,7 @@
 
 #include "ROOT/RVec.hxx"
 
-#include <rarexsec/processing/IEventProcessor.h>
+#include <rarexsec/IEventProcessor.h>
 
 namespace proc {
 

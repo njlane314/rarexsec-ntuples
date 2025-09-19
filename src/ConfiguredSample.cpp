@@ -1,6 +1,6 @@
-#include <rarexsec/processing/ConfiguredSample.h>
+#include <rarexsec/ConfiguredSample.h>
 
-#include <rarexsec/logging/Logger.h>
+#include <rarexsec/Logger.h>
 
 namespace proc {
 namespace {
