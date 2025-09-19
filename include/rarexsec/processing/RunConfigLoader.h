@@ -7,7 +7,7 @@
 
 #include <rarexsec/processing/RunConfigRegistry.h>
 
-namespace analysis {
+namespace proc {
 
 class RunConfigLoader {
   public:

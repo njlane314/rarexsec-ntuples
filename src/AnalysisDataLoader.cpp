@@ -9,7 +9,7 @@
 #include <rarexsec/processing/WeightProcessor.h>
 #include <rarexsec/utils/Logger.h>
 
-namespace analysis {
+namespace proc {
 
 AnalysisDataLoader::AnalysisDataLoader(const RunConfigRegistry &run_config_registry, VariableRegistry variable_registry,
                                        std::string beam_mode, std::vector<std::string> periods,
@@ -103,9 +103,9 @@ void AnalysisDataLoader::processRunConfig(const RunConfig &rc) {
             std::make_unique<PreselectionProcessor>(), std::make_unique<NuMuCCSelectionProcessor>());
         processors_.push_back(std::move(pipeline));
 
-        auto &proc = *processors_.back();
+        auto &processor = *processors_.back();
 
-        SampleDefinition sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, proc};
+        SampleDefinition sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, processor};
         const auto sample_key = sample.sampleKey();
 
         run_config_cache_.emplace(sample_key, &rc);

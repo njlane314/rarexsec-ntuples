@@ -7,7 +7,7 @@
 
 #include <rarexsec/processing/IEventProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 class MuonSelectionProcessor : public IEventProcessor {
   public:

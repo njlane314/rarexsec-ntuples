@@ -6,7 +6,7 @@
 #include <string>
 #include <utility>
 
-namespace analysis {
+namespace proc {
 
 class SampleKey {
   public:
@@ -31,8 +31,8 @@ struct SampleKeyHash {
 }
 
 namespace std {
-template <> struct hash<analysis::SampleKey> {
-    std::size_t operator()(const analysis::SampleKey &key) const noexcept { return analysis::SampleKeyHash{}(key); }
+template <> struct hash<proc::SampleKey> {
+    std::size_t operator()(const proc::SampleKey &key) const noexcept { return proc::SampleKeyHash{}(key); }
 };
 }
 

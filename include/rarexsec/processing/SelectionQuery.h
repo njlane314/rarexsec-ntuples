@@ -4,7 +4,7 @@
 #include <string>
 #include <utility>
 
-namespace analysis {
+namespace proc {
 
 class SelectionQuery {
   public:

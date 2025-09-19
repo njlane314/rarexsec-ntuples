@@ -8,7 +8,7 @@
 
 #include <rarexsec/processing/RunConfig.h>
 
-namespace analysis {
+namespace proc {
 
 class RunConfigRegistry {
   public:

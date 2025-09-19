@@ -1,6 +1,6 @@
 #include <rarexsec/processing/MuonSelectionProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 ROOT::RDF::RNode MuonSelectionProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     auto proc_df = df;

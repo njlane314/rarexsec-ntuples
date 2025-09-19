@@ -6,7 +6,7 @@
 #include <rarexsec/processing/IEventProcessor.h>
 #include <rarexsec/processing/SampleTypes.h>
 
-namespace analysis {
+namespace proc {
 
 class WeightProcessor : public IEventProcessor {
   public:

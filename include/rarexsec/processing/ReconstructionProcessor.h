@@ -5,7 +5,7 @@
 
 #include <rarexsec/processing/IEventProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 class ReconstructionProcessor : public IEventProcessor {
   public:

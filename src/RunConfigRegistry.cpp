@@ -1,6 +1,6 @@
 #include <rarexsec/processing/RunConfigRegistry.h>
 
-namespace analysis {
+namespace proc {
 
 void RunConfigRegistry::addConfig(RunConfig config) {
     auto key = config.label();

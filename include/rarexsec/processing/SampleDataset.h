@@ -8,7 +8,7 @@
 #include <rarexsec/processing/AnalysisKey.h>
 #include <rarexsec/processing/SampleTypes.h>
 
-namespace analysis {
+namespace proc {
 
 struct SampleDataset {
     SampleOrigin origin_;

@@ -47,9 +47,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    analysis::RunConfigRegistry registry;
+    proc::RunConfigRegistry registry;
     try {
-        analysis::RunConfigLoader::loadFromFile(config_path, registry);
+        proc::RunConfigLoader::loadFromFile(config_path, registry);
     } catch (const std::exception &e) {
         std::cerr << "Failed to load run configuration: " << e.what() << std::endl;
         return 1;
@@ -62,14 +62,14 @@ int main(int argc, char **argv) {
     }
 
     try {
-        analysis::AnalysisDataLoader loader(registry, analysis::VariableRegistry{}, beam, periods, *base_dir);
+        proc::AnalysisDataLoader loader(registry, proc::VariableRegistry{}, beam, periods, *base_dir);
         if (!output.empty()) {
             if (!selection.empty()) {
                 loader.snapshot(selection, output);
             } else {
                 loader.snapshot("", output);
             }
-            analysis::log::info("main", "Snapshot written to", output);
+            proc::log::info("main", "Snapshot written to", output);
         } else {
             loader.printAllBranches();
         }

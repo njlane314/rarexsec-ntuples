@@ -14,7 +14,7 @@
 #include <rarexsec/processing/SampleTypes.h>
 #include <rarexsec/processing/VariableRegistry.h>
 
-namespace analysis {
+namespace proc {
 
 class SampleDefinition {
   public:

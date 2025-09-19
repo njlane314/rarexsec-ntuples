@@ -2,7 +2,7 @@
 
 #include <rarexsec/utils/Logger.h>
 
-namespace analysis {
+namespace proc {
 namespace {
 
 ROOT::RDF::RNode buildBaseDataFrame(const std::string &base_dir, const std::string &rel_path,
