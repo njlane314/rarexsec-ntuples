@@ -23,7 +23,7 @@ CMake workflow:
 ```bash
 make                # configure (in ./build) and compile the library and runner
 make test           # invoke ctest (no tests are defined yet, but the target exists)
-make install        # install into CMAKE_INSTALL_PREFIX (defaults to /usr/local)
+make install        # install into ./install (or override via CMAKE_INSTALL_PREFIX)
 make distclean      # remove the build directory completely
 ```
 
@@ -33,6 +33,10 @@ Alternatively you can call CMake directly:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
+
+The default installation prefix is the repository-local `./install` directory.
+Override it either when configuring (`-DCMAKE_INSTALL_PREFIX=/path/to/prefix`)
+or at install time (`make install INSTALL_FLAGS="--prefix=/path/to/prefix"`).
 
 ## Running the processing CLI
 
