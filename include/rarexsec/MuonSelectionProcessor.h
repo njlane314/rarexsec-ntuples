@@ -8,6 +8,10 @@ namespace proc {
 class MuonSelectionProcessor : public EventProcessorStage {
   public:
     ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
+
+  private:
+    ROOT::RDF::RNode buildMuonMask(ROOT::RDF::RNode df) const;
+    ROOT::RDF::RNode extractMuonFeatures(ROOT::RDF::RNode df) const;
 };
 
 } // namespace proc
