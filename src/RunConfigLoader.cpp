@@ -1,31 +1,36 @@
 #include <rarexsec/processing/RunConfigLoader.h>
 
 #include <fstream>
+#include <stdexcept>
 
 #include <rarexsec/utils/Logger.h>
 
 namespace analysis {
 
 void RunConfigLoader::loadFromJson(const nlohmann::json &data, RunConfigRegistry &registry) {
-    const nlohmann::json *scope = &data;
-    if (auto samples_it = data.find("samples"); samples_it != data.end()) {
-        if (!samples_it->is_object()) {
-            log::fatal("RunConfigLoader::loadFromJson", "\"samples\" entry must be an object");
+    if (data.contains("ntuple_base_directory") && data.at("ntuple_base_directory").is_string()) {
+        registry.setBaseDirectory(data.at("ntuple_base_directory").get<std::string>());
+    } else if (data.contains("samples")) {
+        const auto &samples = data.at("samples");
+        if (samples.contains("ntupledir") && samples.at("ntupledir").is_string()) {
+            registry.setBaseDirectory(samples.at("ntupledir").get<std::string>());
         }
-        scope = &(*samples_it);
     }
 
-    const auto beamlines_it = scope->find("beamlines");
-    if (beamlines_it == scope->end()) {
-        log::fatal("RunConfigLoader::loadFromJson",
-                   "Missing beamlines section in configuration payload");
+    const nlohmann::json *run_configs_root = nullptr;
+    if (data.contains("run_configurations")) {
+        run_configs_root = &data.at("run_configurations");
+    } else if (data.contains("beamlines")) {
+        run_configs_root = &data.at("beamlines");
+    } else if (data.contains("samples") && data.at("samples").contains("beamlines")) {
+        run_configs_root = &data.at("samples").at("beamlines");
     }
 
-    if (!beamlines_it->is_object()) {
-        log::fatal("RunConfigLoader::loadFromJson", "\"beamlines\" section must be an object");
+    if (run_configs_root == nullptr) {
+        throw std::runtime_error("RunConfigLoader::loadFromJson: missing run configuration sections");
     }
 
-    for (auto const &[beam, run_configs] : beamlines_it->items()) {
+    for (auto const &[beam, run_configs] : run_configs_root->items()) {
         for (auto const &[run_period, run_details] : run_configs.items()) {
             RunConfig config(run_details, beam, run_period);
             config.validate();

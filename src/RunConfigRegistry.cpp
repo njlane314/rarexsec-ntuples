@@ -19,4 +19,8 @@ const RunConfig &RunConfigRegistry::get(const std::string &beam, const std::stri
     return it->second;
 }
 
+void RunConfigRegistry::setBaseDirectory(std::string base_directory) {
+    base_directory_ = std::move(base_directory);
+}
+
 }

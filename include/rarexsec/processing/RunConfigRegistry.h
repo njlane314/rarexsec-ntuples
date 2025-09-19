@@ -2,6 +2,7 @@
 #define RAREXSEC_PROCESSING_RUN_CONFIG_REGISTRY_H
 
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -17,8 +18,12 @@ class RunConfigRegistry {
 
     const std::map<std::string, RunConfig> &all() const noexcept { return configs_; }
 
+    void setBaseDirectory(std::string base_directory);
+    const std::optional<std::string> &baseDirectory() const noexcept { return base_directory_; }
+
   private:
     std::map<std::string, RunConfig> configs_;
+    std::optional<std::string> base_directory_;
 };
 
 }
