@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         if (options.output) {
             const std::string output_file = options.output->string();
             loader.snapshot(options.selection.value_or(""), output_file);
-            proc::log::info("main", "Snapshot written to", output_file);
+            proc::log::info("runner", "Snapshot written to", output_file);
             std::cout << "ROOT snapshot saved to: " << output_file << std::endl;
         } else {
             loader.printAllBranches();

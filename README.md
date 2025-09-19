@@ -41,7 +41,7 @@ relative file paths.
 ### Event processing runner
 
 ```bash
-./build/main/rarexsec-runner/rarexsec-runner \
+./build/apps/rarexsec-runner/rarexsec-runner \
     config/catalogues/samples.json \
     numi \
     run1,run2 \
@@ -58,7 +58,7 @@ relative file paths.
 ### Training pool tool
 
 ```bash
-./build/main/rarexsec-training-pool/rarexsec-training-pool \
+./build/apps/rarexsec-training-pool/rarexsec-training-pool \
     config/catalogues/samples.json \
     numi \
     run1,run2 \

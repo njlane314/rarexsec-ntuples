@@ -1,4 +1,4 @@
-// This ROOT macro is kept in the main directory as a lightweight example that can
+// This ROOT macro is kept in the apps directory as a lightweight example that can
 // be imitated when scripting custom snapshot exploration workflows.
 
 #include "ExampleInterface.h"
@@ -18,7 +18,7 @@ using rarexsec::examples::SampleSummary;
 
 //
 // Example usage from the ROOT prompt:
-// root [0] .L main/plot_example.C
+// root [0] .L apps/plot_example.C
 // root [1] plot_example("analysis_snapshot.root", "numi_run1", "reco_nu_energy")
 //
 
