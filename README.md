@@ -63,7 +63,7 @@ relative file paths.
 ### Event processing runner
 
 ```bash
-./build/main/rarexsec-runner/rarexsec-runner \
+./build/app/rarexsec-runner/rarexsec-runner \
     config/catalogues/samples.json \
     numi \
     run1,run2 \
@@ -80,7 +80,7 @@ relative file paths.
 ### Training pool tool
 
 ```bash
-./build/main/rarexsec-training-pool/rarexsec-training-pool \
+./build/app/rarexsec-training-pool/rarexsec-training-pool \
     config/catalogues/samples.json \
     numi \
     run1,run2 \
@@ -90,7 +90,7 @@ relative file paths.
 
 The training pool command records the event identifiers, weights, truth-channel
 labels, and CNN-friendly image tensors while retaining the same snapshot layout
-as the main runner.
+as the runner tool.
 
 ## Snapshot layout
 
