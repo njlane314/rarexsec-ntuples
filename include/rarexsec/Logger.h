@@ -48,32 +48,32 @@ inline std::string join_message(First &&first, Rest &&...rest) {
 }
 
 template <typename... Args>
-inline void write(std::ostream &os, const std::string &level, Args &&...args) {
+inline void write(std::ostream &os, Args &&...args) {
     std::lock_guard<std::mutex> lock(log_mutex());
-    os << '[' << timestamp() << "] [" << level << "] " << join_message(std::forward<Args>(args)...) << std::endl;
+    os << '[' << timestamp() << "] " << join_message(std::forward<Args>(args)...) << std::endl;
 }
 
 }
 
 template <typename... Args>
 inline void debug(Args &&...args) {
-    detail::write(std::clog, "DEBUG", std::forward<Args>(args)...);
+    detail::write(std::clog, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
 inline void info(Args &&...args) {
-    detail::write(std::clog, "INFO", std::forward<Args>(args)...);
+    detail::write(std::clog, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
 inline void warn(Args &&...args) {
-    detail::write(std::clog, "WARN", std::forward<Args>(args)...);
+    detail::write(std::clog, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
 [[noreturn]] inline void fatal(Args &&...args) {
     std::string msg = detail::join_message(std::forward<Args>(args)...);
-    detail::write(std::clog, "FATAL", msg);
+    detail::write(std::clog, msg);
     throw std::runtime_error(msg);
 }
 
