@@ -1,18 +1,5 @@
 # rarexsec-ntuples
 
-`rarexsec-ntuples` provides a lightweight C++17 library and CLI tools for
-assembling ROOT `RDataFrame` pipelines that are driven by JSON catalogues of
-beam periods and samples.
-
-## Requirements
-
-- GCC 9+/Clang 10+ (or any C++17-capable toolchain)
-- [CMake](https://cmake.org/) 3.16 or newer
-- [ROOT](https://root.cern/) with the `RIO`, `Tree`, `Hist`, and `ROOTDataFrame`
-  components on your `CMAKE_PREFIX_PATH`
-- The header-only [nlohmann/json](https://github.com/nlohmann/json) dependency
-  is fetched automatically during configuration
-
 ## Build
 
 ### Makefile shortcuts
