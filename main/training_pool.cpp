@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <rarexsec/AnalysisDataLoader.h>
+#include <rarexsec/SnapshotPipelineBuilder.h>
 #include <rarexsec/BeamPeriodConfigLoader.h>
 #include <rarexsec/Logger.h>
 
@@ -55,7 +55,7 @@ const std::vector<std::string> &requestedTrainingPoolColumns() {
     return columns;
 }
 
-std::vector<std::string> filterAvailableColumns(const proc::AnalysisDataLoader::SampleFrameMap &frames,
+std::vector<std::string> filterAvailableColumns(const proc::SnapshotPipelineBuilder::SampleFrameMap &frames,
                                                 const std::vector<std::string> &requested) {
     std::vector<std::string> available;
     available.reserve(requested.size());
@@ -123,9 +123,10 @@ int main(int argc, char **argv) {
     }
 
     try {
-        proc::AnalysisDataLoader loader(registry, proc::VariableRegistry{}, options.beam, options.periods, *base_dir);
+        proc::SnapshotPipelineBuilder builder(registry, proc::VariableRegistry{}, options.beam, options.periods,
+                                              *base_dir);
 
-        const auto &frames = loader.getSampleFrames();
+        const auto &frames = builder.getSampleFrames();
         auto columns = filterAvailableColumns(frames, requestedTrainingPoolColumns());
         if (columns.empty()) {
             std::cerr << "None of the requested training pool columns are available for the selected samples." << std::endl;
@@ -133,7 +134,7 @@ int main(int argc, char **argv) {
         }
 
         const std::string output_file = options.output->string();
-        loader.snapshot(options.selection.value_or(""), output_file, columns);
+        builder.snapshot(options.selection.value_or(""), output_file, columns);
         proc::log::info("rarexsec-training-pool", "Training pool snapshot written to", output_file);
         std::cout << "Training pool generated at: " << output_file << std::endl;
     } catch (const std::exception &e) {

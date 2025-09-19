@@ -1,15 +1,15 @@
-#ifndef SELECTION_QUERY_H
-#define SELECTION_QUERY_H
+#ifndef FILTER_EXPRESSION_H
+#define FILTER_EXPRESSION_H
 
 #include <string>
 #include <utility>
 
 namespace proc {
 
-class SelectionQuery {
+class FilterExpression {
   public:
-    SelectionQuery() = default;
-    explicit SelectionQuery(std::string filter) : filter_(std::move(filter)) {}
+    FilterExpression() = default;
+    explicit FilterExpression(std::string filter) : filter_(std::move(filter)) {}
 
     const std::string &str() const noexcept { return filter_; }
     bool empty() const noexcept { return filter_.empty(); }
@@ -18,6 +18,6 @@ class SelectionQuery {
     std::string filter_;
 };
 
-}
+} // namespace proc
 
 #endif

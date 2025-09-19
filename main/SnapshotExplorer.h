@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_MAIN_EXAMPLEINTERFACE_H
-#define RAREXSEC_MAIN_EXAMPLEINTERFACE_H
+#ifndef RAREXSEC_MAIN_SNAPSHOTEXPLORER_H
+#define RAREXSEC_MAIN_SNAPSHOTEXPLORER_H
 
 #include <ROOT/RDataFrame.hxx>
 #include <ROOT/RDF/TH1DModel.hxx>
@@ -25,9 +25,9 @@
 namespace rarexsec::examples {
 
 /**
- * @brief Summary information for each processed sample stored in the snapshot file.
+ * @brief Metadata describing each processed sample stored in the snapshot file.
  */
-struct SampleSummary {
+struct SampleMetadata {
     std::string tree_name;
     std::string beam;
     std::string run_period;
@@ -41,19 +41,19 @@ struct SampleSummary {
 };
 
 /**
- * @brief Utility class that reads metadata from a rarexsec snapshot ROOT file and provides
+ * @brief Utility that reads metadata from a rarexsec snapshot ROOT file and provides
  *        helpers to build ROOT::RDataFrame driven histograms.
  */
-class ExampleInterface {
+class SnapshotExplorer {
   public:
     /**
      * @brief Lightweight proxy providing convenience methods for a single snapshot sample.
      */
-    class SampleHandle {
+    class SampleView {
       public:
-        const SampleSummary &summary() const { return *summary_; }
+        const SampleMetadata &metadata() const { return *metadata_; }
 
-        const std::string &treeName() const { return summary_->tree_name; }
+        const std::string &treeName() const { return metadata_->tree_name; }
 
         ROOT::RDF::RDataFrame dataFrame() const { return owner_->dataFrame(treeName()); }
 
@@ -70,16 +70,16 @@ class ExampleInterface {
         }
 
       private:
-        SampleHandle(const ExampleInterface *owner, const SampleSummary *summary)
-            : owner_(owner), summary_(summary) {}
+        SampleView(const SnapshotExplorer *owner, const SampleMetadata *metadata)
+            : owner_(owner), metadata_(metadata) {}
 
-        const ExampleInterface *owner_ = nullptr;
-        const SampleSummary *summary_ = nullptr;
+        const SnapshotExplorer *owner_ = nullptr;
+        const SampleMetadata *metadata_ = nullptr;
 
-        friend class ExampleInterface;
+        friend class SnapshotExplorer;
     };
 
-    explicit ExampleInterface(std::string file_name) : file_name_(std::move(file_name)) { loadMetadata(); }
+    explicit SnapshotExplorer(std::string file_name) : file_name_(std::move(file_name)) { loadMetadata(); }
 
     const std::string &fileName() const { return file_name_; }
 
@@ -87,7 +87,7 @@ class ExampleInterface {
 
     long totalTriggers() const { return total_triggers_; }
 
-    const std::vector<SampleSummary> &samples() const { return samples_; }
+    const std::vector<SampleMetadata> &samples() const { return samples_; }
 
     auto begin() const { return samples_.begin(); }
     auto end() const { return samples_.end(); }
@@ -95,32 +95,32 @@ class ExampleInterface {
     std::vector<std::string> treeNames() const {
         std::vector<std::string> names;
         names.reserve(samples_.size());
-        for (const auto &summary : samples_) {
-            names.emplace_back(summary.tree_name);
+        for (const auto &metadata : samples_) {
+            names.emplace_back(metadata.tree_name);
         }
         return names;
     }
 
     /**
-     * @brief Return a handle for the requested sample if it exists.
+     * @brief Return a view for the requested sample if it exists.
      */
-    std::optional<SampleHandle> trySample(const std::string &tree_name) const {
+    std::optional<SampleView> trySample(const std::string &tree_name) const {
         auto it = sample_index_.find(tree_name);
         if (it == sample_index_.end()) {
             return std::nullopt;
         }
-        return SampleHandle(this, &samples_.at(it->second));
+        return SampleView(this, &samples_.at(it->second));
     }
 
     /**
-     * @brief Return a handle for the requested sample or throw if it is missing.
+     * @brief Return a view for the requested sample or throw if it is missing.
      */
-    SampleHandle sample(const std::string &tree_name) const {
-        auto handle = trySample(tree_name);
-        if (!handle) {
-            throw std::runtime_error("ExampleInterface: unknown tree '" + tree_name + "' in " + file_name_);
+    SampleView sample(const std::string &tree_name) const {
+        auto view = trySample(tree_name);
+        if (!view) {
+            throw std::runtime_error("SnapshotExplorer: unknown tree '" + tree_name + "' in " + file_name_);
         }
-        return *handle;
+        return *view;
     }
 
     /**
@@ -164,10 +164,10 @@ class ExampleInterface {
     }
 
   private:
-    const SampleSummary &requireSample(const std::string &tree_name) const {
+    const SampleMetadata &requireSample(const std::string &tree_name) const {
         auto it = sample_index_.find(tree_name);
         if (it == sample_index_.end()) {
-            throw std::runtime_error("ExampleInterface: unknown tree '" + tree_name + "' in " + file_name_);
+            throw std::runtime_error("SnapshotExplorer: unknown tree '" + tree_name + "' in " + file_name_);
         }
         return samples_.at(it->second);
     }
@@ -175,12 +175,12 @@ class ExampleInterface {
     void loadMetadata() {
         std::unique_ptr<TFile> file{TFile::Open(file_name_.c_str(), "READ")};
         if (!file || file->IsZombie()) {
-            throw std::runtime_error("ExampleInterface: unable to open file " + file_name_);
+            throw std::runtime_error("SnapshotExplorer: unable to open file " + file_name_);
         }
 
         TDirectory *meta_dir = file->GetDirectory("meta");
         if (!meta_dir) {
-            throw std::runtime_error("ExampleInterface: missing 'meta' directory in " + file_name_);
+            throw std::runtime_error("SnapshotExplorer: missing 'meta' directory in " + file_name_);
         }
 
         total_pot_ = 0.0;
@@ -212,16 +212,16 @@ class ExampleInterface {
             TTreeReaderValue<double> sample_pot(samples_reader, "sample_pot");
             TTreeReaderValue<Long64_t> sample_triggers(samples_reader, "sample_triggers");
 
-            std::vector<SampleSummary> samples;
+            std::vector<SampleMetadata> samples;
             samples.reserve(static_cast<std::size_t>(samples_tree->GetEntries()));
             while (samples_reader.Next()) {
-                samples.push_back(SampleSummary{*tree_name,   *beam,      *run_period, *dataset_id, *relative_path,
-                                                *variation, *stage_name, *origin,     *sample_pot,
-                                                static_cast<long>(*sample_triggers)});
+                samples.push_back(SampleMetadata{*tree_name,   *beam,      *run_period, *dataset_id, *relative_path,
+                                                 *variation, *stage_name, *origin,     *sample_pot,
+                                                 static_cast<long>(*sample_triggers)});
             }
 
             std::sort(samples.begin(), samples.end(),
-                      [](const SampleSummary &a, const SampleSummary &b) { return a.tree_name < b.tree_name; });
+                      [](const SampleMetadata &a, const SampleMetadata &b) { return a.tree_name < b.tree_name; });
 
             samples_.swap(samples);
             sample_index_.reserve(samples_.size());
@@ -234,10 +234,10 @@ class ExampleInterface {
     std::string file_name_;
     double total_pot_ = 0.0;
     long total_triggers_ = 0;
-    std::vector<SampleSummary> samples_;
+    std::vector<SampleMetadata> samples_;
     std::unordered_map<std::string, std::size_t> sample_index_;
 };
 
 } // namespace rarexsec::examples
 
-#endif // RAREXSEC_MAIN_EXAMPLEINTERFACE_H
+#endif // RAREXSEC_MAIN_SNAPSHOTEXPLORER_H

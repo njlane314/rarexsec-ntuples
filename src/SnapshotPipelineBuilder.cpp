@@ -1,4 +1,4 @@
-#include <rarexsec/AnalysisDataLoader.h>
+#include <rarexsec/SnapshotPipelineBuilder.h>
 
 #include "TDirectory.h"
 #include "TFile.h"
@@ -9,8 +9,8 @@
 #include <cctype>
 #include <sstream>
 
-#include <rarexsec/Logger.h>
 #include <rarexsec/BlipProcessor.h>
+#include <rarexsec/Logger.h>
 #include <rarexsec/MuonSelectionProcessor.h>
 #include <rarexsec/PreselectionProcessor.h>
 #include <rarexsec/ReconstructionProcessor.h>
@@ -41,7 +41,7 @@ std::vector<std::string> nominalDirectoryComponents(const proc::SampleKey &sampl
 }
 
 std::vector<std::string> variationDirectoryComponents(const proc::SampleKey &base_key,
-                                                      const proc::SampleVariationDefinition &variation_def) {
+                                                      const proc::VariationDescriptor &variation_def) {
     std::string label = variation_def.variation_label;
     if (label.empty()) {
         label = proc::variationToKey(variation_def.variation);
@@ -64,8 +64,7 @@ std::string nominalTreePath(const proc::SampleKey &sample_key) {
     return componentsToPath(nominalDirectoryComponents(sample_key)) + "/events";
 }
 
-std::string variationTreePath(const proc::SampleKey &base_key,
-                              const proc::SampleVariationDefinition &variation_def) {
+std::string variationTreePath(const proc::SampleKey &base_key, const proc::VariationDescriptor &variation_def) {
     return componentsToPath(variationDirectoryComponents(base_key, variation_def)) + "/events";
 }
 
@@ -73,9 +72,10 @@ std::string variationTreePath(const proc::SampleKey &base_key,
 
 namespace proc {
 
-AnalysisDataLoader::AnalysisDataLoader(const BeamPeriodConfigRegistry &run_config_registry,
-                                       VariableRegistry variable_registry, std::string beam_mode,
-                                       std::vector<std::string> periods, std::string ntuple_base_dir, bool blind)
+SnapshotPipelineBuilder::SnapshotPipelineBuilder(const BeamPeriodConfigRegistry &run_config_registry,
+                                                 VariableRegistry variable_registry, std::string beam_mode,
+                                                 std::vector<std::string> periods, std::string ntuple_base_dir,
+                                                 bool blind)
     : run_registry_(run_config_registry),
       var_registry_(std::move(variable_registry)),
       ntuple_base_directory_(std::move(ntuple_base_dir)),
@@ -87,7 +87,7 @@ AnalysisDataLoader::AnalysisDataLoader(const BeamPeriodConfigRegistry &run_confi
     loadAll();
 }
 
-const BeamPeriodConfig *AnalysisDataLoader::getRunConfigForSample(const SampleKey &sk) const {
+const BeamPeriodConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey &sk) const {
     auto it = run_config_cache_.find(sk);
     if (it != run_config_cache_.end()) {
         return it->second;
@@ -95,8 +95,8 @@ const BeamPeriodConfig *AnalysisDataLoader::getRunConfigForSample(const SampleKe
     return nullptr;
 }
 
-void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::string &output_file,
-                                  const std::vector<std::string> &columns) const {
+void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
+                                       const std::vector<std::string> &columns) const {
     bool first = true;
     ROOT::RDF::RSnapshotOptions opts;
 
@@ -111,7 +111,7 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
 
     for (auto const &[key, sample] : frames_) {
         snapshot_tree(sample.nominalNode(), key.str());
-        for (const auto &variation_def : sample.variationDefinitions()) {
+        for (const auto &variation_def : sample.variationDescriptors()) {
             const auto &variation_nodes = sample.variationNodes();
             auto it = variation_nodes.find(variation_def.variation);
             if (it == variation_nodes.end()) {
@@ -122,7 +122,7 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
     }
 
     if (first) {
-        log::warn("AnalysisDataLoader::snapshot", "No samples were written to", output_file);
+        log::warn("SnapshotPipelineBuilder::snapshot", "No samples were written to", output_file);
         return;
     }
 
@@ -130,23 +130,23 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
     writeSnapshotMetadata(output_file);
 }
 
-void AnalysisDataLoader::snapshot(const SelectionQuery &query, const std::string &output_file,
-                                  const std::vector<std::string> &columns) const {
+void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
+                                       const std::vector<std::string> &columns) const {
     snapshot(query.str(), output_file, columns);
 }
 
-void AnalysisDataLoader::printAllBranches() const {
-    log::debug("AnalysisDataLoader::printAllBranches", "Available branches in loaded samples");
+void SnapshotPipelineBuilder::printAllBranches() const {
+    log::debug("SnapshotPipelineBuilder::printAllBranches", "Available branches in loaded samples");
     for (auto &[sample_key, sample_def] : frames_) {
-        log::debug("AnalysisDataLoader::printAllBranches", "Sample", sample_key.str());
+        log::debug("SnapshotPipelineBuilder::printAllBranches", "Sample", sample_key.str());
         auto branches = sample_def.nominalNode().GetColumnNames();
         for (const auto &branch : branches) {
-            log::debug("AnalysisDataLoader::printAllBranches", branch);
+            log::debug("SnapshotPipelineBuilder::printAllBranches", branch);
         }
     }
 }
 
-void AnalysisDataLoader::loadAll() {
+void SnapshotPipelineBuilder::loadAll() {
     const std::string ext_beam{"numi_ext"};
     std::vector<const BeamPeriodConfig *> configs_to_process;
     for (auto &period : periods_) {
@@ -169,16 +169,16 @@ void AnalysisDataLoader::loadAll() {
     }
 }
 
-void AnalysisDataLoader::processRunConfig(const BeamPeriodConfig &rc) {
+void SnapshotPipelineBuilder::processRunConfig(const BeamPeriodConfig &rc) {
     processors_.reserve(processors_.size() + rc.sampleConfigs().size());
     for (auto &sample_json : rc.sampleConfigs()) {
         if (sample_json.contains("active") && !sample_json.at("active").get<bool>()) {
-            log::info("AnalysisDataLoader::processRunConfig", "Skipping inactive sample",
+            log::info("SnapshotPipelineBuilder::processRunConfig", "Skipping inactive sample",
                       sample_json.at("sample_key").get<std::string>());
             continue;
         }
 
-        auto pipeline = chainEventProcessors(
+        auto pipeline = chainProcessorStages(
             std::make_unique<WeightProcessor>(sample_json, total_pot_, total_triggers_),
             std::make_unique<TruthChannelProcessor>(), std::make_unique<BlipProcessor>(),
             std::make_unique<MuonSelectionProcessor>(), std::make_unique<ReconstructionProcessor>(),
@@ -187,21 +187,21 @@ void AnalysisDataLoader::processRunConfig(const BeamPeriodConfig &rc) {
 
         auto &processor = *processors_.back();
 
-        ConfiguredSample sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, processor};
+        SamplePipeline sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, processor};
         const auto sample_key = sample.sampleKey();
 
         run_config_cache_.emplace(sample_key, &rc);
-        for (const auto &variation_def : sample.variationDefinitions()) {
+        for (const auto &variation_def : sample.variationDescriptors()) {
             run_config_cache_.emplace(variation_def.sample_key, &rc);
         }
         frames_.emplace(sample_key, std::move(sample));
     }
 }
 
-void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) const {
+void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_file) const {
     std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "UPDATE")};
     if (!file || file->IsZombie()) {
-        log::fatal("AnalysisDataLoader::writeSnapshotMetadata", "Failed to open snapshot output", output_file);
+        log::fatal("SnapshotPipelineBuilder::writeSnapshotMetadata", "Failed to open snapshot output", output_file);
     }
 
     TDirectory *meta_dir = file->GetDirectory("meta");
@@ -209,7 +209,7 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         meta_dir = file->mkdir("meta");
     }
     if (!meta_dir) {
-        log::fatal("AnalysisDataLoader::writeSnapshotMetadata", "Could not create meta directory");
+        log::fatal("SnapshotPipelineBuilder::writeSnapshotMetadata", "Could not create meta directory");
     }
     meta_dir->cd();
 
@@ -262,7 +262,7 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         sample_triggers = sample.triggers();
         samples_tree.Fill();
 
-        for (const auto &variation_def : sample.variationDefinitions()) {
+        for (const auto &variation_def : sample.variationDescriptors()) {
             tree_path = variationTreePath(key, variation_def);
             sample_key_value = variation_def.sample_key.str();
             dataset_id = variation_def.dataset_id;
@@ -288,10 +288,11 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     file->cd();
 }
 
-void AnalysisDataLoader::reorganiseSnapshotTrees(const std::string &output_file) const {
+void SnapshotPipelineBuilder::reorganiseSnapshotTrees(const std::string &output_file) const {
     std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "UPDATE")};
     if (!file || file->IsZombie()) {
-        log::fatal("AnalysisDataLoader::reorganiseSnapshotTrees", "Failed to open snapshot output", output_file);
+        log::fatal("SnapshotPipelineBuilder::reorganiseSnapshotTrees", "Failed to open snapshot output",
+                   output_file);
     }
 
     const auto ensureDirectory = [&](const std::vector<std::string> &components) {
@@ -305,7 +306,8 @@ void AnalysisDataLoader::reorganiseSnapshotTrees(const std::string &output_file)
                 next = current->mkdir(component.c_str());
             }
             if (!next) {
-                log::fatal("AnalysisDataLoader::reorganiseSnapshotTrees", "Failed to create directory component", component);
+                log::fatal("SnapshotPipelineBuilder::reorganiseSnapshotTrees", "Failed to create directory component",
+                           component);
             }
             current = next;
         }
@@ -319,7 +321,8 @@ void AnalysisDataLoader::reorganiseSnapshotTrees(const std::string &output_file)
         TTree *tree = nullptr;
         file->GetObject(tree_name.c_str(), tree);
         if (!tree) {
-            log::warn("AnalysisDataLoader::reorganiseSnapshotTrees", "Could not locate snapshot tree", tree_name);
+            log::warn("SnapshotPipelineBuilder::reorganiseSnapshotTrees", "Could not locate snapshot tree",
+                      tree_name);
             return;
         }
 
@@ -335,7 +338,7 @@ void AnalysisDataLoader::reorganiseSnapshotTrees(const std::string &output_file)
 
     for (auto const &[key, sample] : frames_) {
         moveTree(key.str(), nominalDirectoryComponents(key));
-        for (const auto &variation_def : sample.variationDefinitions()) {
+        for (const auto &variation_def : sample.variationDescriptors()) {
             moveTree(variation_def.sample_key.str(), variationDirectoryComponents(key, variation_def));
         }
     }
@@ -344,4 +347,4 @@ void AnalysisDataLoader::reorganiseSnapshotTrees(const std::string &output_file)
     file->Write("", TObject::kOverwrite);
 }
 
-}
+} // namespace proc

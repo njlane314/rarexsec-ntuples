@@ -1,26 +1,15 @@
 #ifndef TRUTH_CHANNEL_PROCESSOR_H
 #define TRUTH_CHANNEL_PROCESSOR_H
 
-#include <map>
-#include <mutex>
-
-#include <rarexsec/IEventProcessor.h>
+#include <rarexsec/EventProcessorStage.h>
 
 namespace proc {
 
-class TruthChannelProcessor : public IEventProcessor {
+class TruthChannelProcessor : public EventProcessorStage {
   public:
-    TruthChannelProcessor() = default;
     ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
-
-  private:
-    ROOT::RDF::RNode processNonMc(ROOT::RDF::RNode df, SampleOrigin st) const;
-    ROOT::RDF::RNode defineCounts(ROOT::RDF::RNode df) const;
-    ROOT::RDF::RNode assignInclusiveChannels(ROOT::RDF::RNode df) const;
-    ROOT::RDF::RNode assignExclusiveChannels(ROOT::RDF::RNode df) const;
-    ROOT::RDF::RNode assignChannelDefinitions(ROOT::RDF::RNode df) const;
 };
 
-}
+} // namespace proc
 
 #endif

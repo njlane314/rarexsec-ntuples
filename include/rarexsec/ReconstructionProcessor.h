@@ -1,17 +1,15 @@
 #ifndef RECONSTRUCTION_PROCESSOR_H
 #define RECONSTRUCTION_PROCESSOR_H
 
-#include "ROOT/RVec.hxx"
-
-#include <rarexsec/IEventProcessor.h>
+#include <rarexsec/EventProcessorStage.h>
 
 namespace proc {
 
-class ReconstructionProcessor : public IEventProcessor {
+class ReconstructionProcessor : public EventProcessorStage {
   public:
     ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
 };
 
-}
+} // namespace proc
 
 #endif

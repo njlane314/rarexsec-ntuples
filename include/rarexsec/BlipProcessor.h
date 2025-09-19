@@ -1,19 +1,15 @@
 #ifndef BLIP_PROCESSOR_H
 #define BLIP_PROCESSOR_H
 
-#include <string>
-
-#include "ROOT/RVec.hxx"
-
-#include <rarexsec/IEventProcessor.h>
+#include <rarexsec/EventProcessorStage.h>
 
 namespace proc {
 
-class BlipProcessor : public IEventProcessor {
+class BlipProcessor : public EventProcessorStage {
   public:
     ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
 };
 
-}
+} // namespace proc
 
 #endif

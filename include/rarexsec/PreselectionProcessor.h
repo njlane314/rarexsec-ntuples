@@ -1,15 +1,15 @@
 #ifndef PRESELECTION_PROCESSOR_H
 #define PRESELECTION_PROCESSOR_H
 
-#include <rarexsec/IEventProcessor.h>
+#include <rarexsec/EventProcessorStage.h>
 
 namespace proc {
 
-class PreselectionProcessor : public IEventProcessor {
+class PreselectionProcessor : public EventProcessorStage {
   public:
     ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
 };
 
-}
+} // namespace proc
 
 #endif
