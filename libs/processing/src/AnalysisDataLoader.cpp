@@ -1,5 +1,6 @@
 #include <rarexsec/processing/AnalysisDataLoader.h>
 
+#include <rarexsec/logging/Logger.h>
 #include <rarexsec/processing/BlipProcessor.h>
 #include <rarexsec/processing/MuonSelectionProcessor.h>
 #include <rarexsec/processing/NuMuCCSelectionProcessor.h>
@@ -7,13 +8,12 @@
 #include <rarexsec/processing/ReconstructionProcessor.h>
 #include <rarexsec/processing/TruthChannelProcessor.h>
 #include <rarexsec/processing/WeightProcessor.h>
-#include <rarexsec/utils/Logger.h>
 
 namespace proc {
 
-AnalysisDataLoader::AnalysisDataLoader(const RunConfigRegistry &run_config_registry, VariableRegistry variable_registry,
-                                       std::string beam_mode, std::vector<std::string> periods,
-                                       std::string ntuple_base_dir, bool blind)
+AnalysisDataLoader::AnalysisDataLoader(const BeamPeriodConfigurationRegistry &run_config_registry,
+                                       VariableRegistry variable_registry, std::string beam_mode,
+                                       std::vector<std::string> periods, std::string ntuple_base_dir, bool blind)
     : run_registry_(run_config_registry),
       var_registry_(std::move(variable_registry)),
       ntuple_base_directory_(std::move(ntuple_base_dir)),
@@ -25,7 +25,7 @@ AnalysisDataLoader::AnalysisDataLoader(const RunConfigRegistry &run_config_regis
     loadAll();
 }
 
-const RunConfig *AnalysisDataLoader::getRunConfigForSample(const SampleKey &sk) const {
+const BeamPeriodConfiguration *AnalysisDataLoader::getRunConfigForSample(const SampleKey &sk) const {
     auto it = run_config_cache_.find(sk);
     if (it != run_config_cache_.end()) {
         return it->second;
@@ -66,7 +66,7 @@ void AnalysisDataLoader::printAllBranches() const {
 
 void AnalysisDataLoader::loadAll() {
     const std::string ext_beam{"numi_ext"};
-    std::vector<const RunConfig *> configs_to_process;
+    std::vector<const BeamPeriodConfiguration *> configs_to_process;
     for (auto &period : periods_) {
         const auto &rc = run_registry_.get(beam_, period);
         total_pot_ += rc.nominalPot();
@@ -82,12 +82,12 @@ void AnalysisDataLoader::loadAll() {
         }
     }
 
-    for (const RunConfig *rc : configs_to_process) {
+    for (const BeamPeriodConfiguration *rc : configs_to_process) {
         processRunConfig(*rc);
     }
 }
 
-void AnalysisDataLoader::processRunConfig(const RunConfig &rc) {
+void AnalysisDataLoader::processRunConfig(const BeamPeriodConfiguration &rc) {
     processors_.reserve(processors_.size() + rc.sampleConfigs().size());
     for (auto &sample_json : rc.sampleConfigs()) {
         if (sample_json.contains("active") && !sample_json.at("active").get<bool>()) {
@@ -105,7 +105,7 @@ void AnalysisDataLoader::processRunConfig(const RunConfig &rc) {
 
         auto &processor = *processors_.back();
 
-        SampleDefinition sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, processor};
+        ConfiguredSample sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, processor};
         const auto sample_key = sample.sampleKey();
 
         run_config_cache_.emplace(sample_key, &rc);

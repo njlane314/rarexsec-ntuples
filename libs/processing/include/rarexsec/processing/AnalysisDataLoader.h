@@ -8,9 +8,9 @@
 #include <vector>
 
 #include <rarexsec/processing/AnalysisKey.h>
+#include <rarexsec/processing/BeamPeriodConfigurationRegistry.h>
+#include <rarexsec/processing/ConfiguredSample.h>
 #include <rarexsec/processing/IEventProcessor.h>
-#include <rarexsec/processing/RunConfigRegistry.h>
-#include <rarexsec/processing/SampleDefinition.h>
 #include <rarexsec/processing/SelectionQuery.h>
 #include <rarexsec/processing/VariableRegistry.h>
 
@@ -18,9 +18,10 @@ namespace proc {
 
 class AnalysisDataLoader {
   public:
-    using SampleFrameMap = std::map<SampleKey, SampleDefinition>;
+    using SampleFrameMap = std::map<SampleKey, ConfiguredSample>;
 
-    AnalysisDataLoader(const RunConfigRegistry &run_config_registry, VariableRegistry variable_registry,
+    AnalysisDataLoader(const BeamPeriodConfigurationRegistry &run_config_registry,
+                       VariableRegistry variable_registry,
                        std::string beam_mode, std::vector<std::string> periods, std::string ntuple_base_dir,
                        bool blind = true);
 
@@ -29,7 +30,7 @@ class AnalysisDataLoader {
     long getTotalTriggers() const noexcept { return total_triggers_; }
     const std::string &getBeam() const noexcept { return beam_; }
     const std::vector<std::string> &getPeriods() const noexcept { return periods_; }
-    const RunConfig *getRunConfigForSample(const SampleKey &sk) const;
+    const BeamPeriodConfiguration *getRunConfigForSample(const SampleKey &sk) const;
 
     void snapshot(const std::string &filter_expr, const std::string &output_file,
                   const std::vector<std::string> &columns = {}) const;
@@ -39,7 +40,7 @@ class AnalysisDataLoader {
     void printAllBranches() const;
 
   private:
-    const RunConfigRegistry &run_registry_;
+    const BeamPeriodConfigurationRegistry &run_registry_;
     VariableRegistry var_registry_;
     std::string ntuple_base_directory_;
 
@@ -52,10 +53,10 @@ class AnalysisDataLoader {
 
     SampleFrameMap frames_;
     std::vector<std::unique_ptr<IEventProcessor>> processors_;
-    std::unordered_map<SampleKey, const RunConfig *> run_config_cache_;
+    std::unordered_map<SampleKey, const BeamPeriodConfiguration *> run_config_cache_;
 
     void loadAll();
-    void processRunConfig(const RunConfig &rc);
+    void processRunConfig(const BeamPeriodConfiguration &rc);
 
     template <typename Head, typename... Tail>
     std::unique_ptr<IEventProcessor> chainEventProcessors(std::unique_ptr<Head> head, std::unique_ptr<Tail>... tail);

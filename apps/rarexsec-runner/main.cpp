@@ -7,9 +7,9 @@
 #include <string_view>
 #include <vector>
 
+#include <rarexsec/logging/Logger.h>
 #include <rarexsec/processing/AnalysisDataLoader.h>
-#include <rarexsec/processing/RunConfigLoader.h>
-#include <rarexsec/utils/Logger.h>
+#include <rarexsec/processing/BeamPeriodConfigurationLoader.h>
 
 int main(int argc, char **argv) {
     if (argc < 4) {
@@ -58,9 +58,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    proc::RunConfigRegistry registry;
+    proc::BeamPeriodConfigurationRegistry registry;
     try {
-        proc::RunConfigLoader::loadFromFile(config_path, registry);
+        proc::BeamPeriodConfigurationLoader::loadFromFile(config_path, registry);
     } catch (const std::exception &e) {
         std::cerr << "Failed to load run configuration: " << e.what() << std::endl;
         return 1;

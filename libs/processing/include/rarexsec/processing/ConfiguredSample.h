@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_PROCESSING_SAMPLE_DEFINITION_H
-#define RAREXSEC_PROCESSING_SAMPLE_DEFINITION_H
+#ifndef RAREXSEC_PROCESSING_CONFIGURED_SAMPLE_H
+#define RAREXSEC_PROCESSING_CONFIGURED_SAMPLE_H
 
 #include <filesystem>
 #include <map>
@@ -16,15 +16,15 @@
 
 namespace proc {
 
-class SampleDefinition {
+class ConfiguredSample {
   public:
-    SampleDefinition(const nlohmann::json &sample_json, const nlohmann::json &all_samples_json,
+    ConfiguredSample(const nlohmann::json &sample_json, const nlohmann::json &all_samples_json,
                      const std::string &base_dir, const VariableRegistry &var_reg, IEventProcessor &processor);
 
-    SampleDefinition(SampleDefinition &&) noexcept = default;
-    SampleDefinition &operator=(SampleDefinition &&) noexcept = default;
-    SampleDefinition(const SampleDefinition &) = delete;
-    SampleDefinition &operator=(const SampleDefinition &) = delete;
+    ConfiguredSample(ConfiguredSample &&) noexcept = default;
+    ConfiguredSample &operator=(ConfiguredSample &&) noexcept = default;
+    ConfiguredSample(const ConfiguredSample &) = delete;
+    ConfiguredSample &operator=(const ConfiguredSample &) = delete;
 
     const SampleKey &sampleKey() const noexcept { return sample_key_; }
     SampleOrigin sampleOrigin() const noexcept { return sample_origin_; }
