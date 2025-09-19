@@ -4,7 +4,7 @@
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RVec.hxx"
 
-#include <rarexsec/processing/SampleTypes.h>
+#include <rarexsec/SampleTypes.h>
 
 #include <cstddef>
 #include <string>

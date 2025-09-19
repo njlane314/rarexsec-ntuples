@@ -9,11 +9,11 @@
 #include "ROOT/RDataFrame.hxx"
 #include "nlohmann/json.hpp"
 
-#include <rarexsec/processing/AnalysisKey.h>
-#include <rarexsec/processing/IEventProcessor.h>
-#include <rarexsec/processing/SampleDefinition.h>
-#include <rarexsec/processing/SampleTypes.h>
-#include <rarexsec/processing/VariableRegistry.h>
+#include <rarexsec/AnalysisKey.h>
+#include <rarexsec/IEventProcessor.h>
+#include <rarexsec/SampleDefinition.h>
+#include <rarexsec/SampleTypes.h>
+#include <rarexsec/VariableRegistry.h>
 
 namespace proc {
 

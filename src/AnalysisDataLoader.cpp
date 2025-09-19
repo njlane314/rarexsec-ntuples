@@ -1,4 +1,4 @@
-#include <rarexsec/processing/AnalysisDataLoader.h>
+#include <rarexsec/AnalysisDataLoader.h>
 
 #include "Compression.h"
 #include "TDirectory.h"
@@ -11,15 +11,15 @@
 #include <cctype>
 #include <sstream>
 
-#include <rarexsec/logging/Logger.h>
-#include <rarexsec/processing/BlipProcessor.h>
-#include <rarexsec/processing/MuonSelectionProcessor.h>
-#include <rarexsec/processing/NuMuCCSelectionProcessor.h>
-#include <rarexsec/processing/PreselectionProcessor.h>
-#include <rarexsec/processing/ReconstructionProcessor.h>
-#include <rarexsec/processing/SampleTypes.h>
-#include <rarexsec/processing/TruthChannelProcessor.h>
-#include <rarexsec/processing/WeightProcessor.h>
+#include <rarexsec/Logger.h>
+#include <rarexsec/BlipProcessor.h>
+#include <rarexsec/MuonSelectionProcessor.h>
+#include <rarexsec/NuMuCCSelectionProcessor.h>
+#include <rarexsec/PreselectionProcessor.h>
+#include <rarexsec/ReconstructionProcessor.h>
+#include <rarexsec/SampleTypes.h>
+#include <rarexsec/TruthChannelProcessor.h>
+#include <rarexsec/WeightProcessor.h>
 
 namespace {
 

@@ -1,4 +1,4 @@
-#include <rarexsec/processing/NuMuCCSelectionProcessor.h>
+#include <rarexsec/NuMuCCSelectionProcessor.h>
 
 namespace proc {
 

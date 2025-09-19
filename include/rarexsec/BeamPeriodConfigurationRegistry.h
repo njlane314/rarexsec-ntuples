@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 
-#include <rarexsec/processing/BeamPeriodConfiguration.h>
+#include <rarexsec/BeamPeriodConfiguration.h>
 
 namespace proc {
 

@@ -5,7 +5,7 @@
 
 #include "ROOT/RDataFrame.hxx"
 
-#include <rarexsec/processing/SampleTypes.h>
+#include <rarexsec/SampleTypes.h>
 
 namespace proc {
 

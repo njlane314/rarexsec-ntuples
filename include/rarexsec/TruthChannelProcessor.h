@@ -4,7 +4,7 @@
 #include <map>
 #include <mutex>
 
-#include <rarexsec/processing/IEventProcessor.h>
+#include <rarexsec/IEventProcessor.h>
 
 namespace proc {
 

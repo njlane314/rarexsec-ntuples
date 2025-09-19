@@ -1,8 +1,8 @@
-#include <rarexsec/processing/WeightProcessor.h>
+#include <rarexsec/WeightProcessor.h>
 
 #include <cmath>
 
-#include <rarexsec/logging/Logger.h>
+#include <rarexsec/Logger.h>
 
 namespace proc {
 

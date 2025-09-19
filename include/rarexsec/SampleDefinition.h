@@ -7,8 +7,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include <rarexsec/processing/AnalysisKey.h>
-#include <rarexsec/processing/SampleTypes.h>
+#include <rarexsec/AnalysisKey.h>
+#include <rarexsec/SampleTypes.h>
 
 namespace proc {
 

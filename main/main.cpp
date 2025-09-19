@@ -8,9 +8,9 @@
 #include <sstream>
 #include <vector>
 
-#include <rarexsec/logging/Logger.h>
-#include <rarexsec/processing/AnalysisDataLoader.h>
-#include <rarexsec/processing/BeamPeriodConfigurationLoader.h>
+#include <rarexsec/Logger.h>
+#include <rarexsec/AnalysisDataLoader.h>
+#include <rarexsec/BeamPeriodConfigurationLoader.h>
 
 namespace {
 
