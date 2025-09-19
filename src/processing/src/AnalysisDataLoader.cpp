@@ -8,6 +8,8 @@
 #include "TTree.h"
 #include "ROOT/RDF/RSnapshotOptions.hxx"
 
+#include <cctype>
+
 #include <rarexsec/logging/Logger.h>
 #include <rarexsec/processing/BlipProcessor.h>
 #include <rarexsec/processing/MuonSelectionProcessor.h>
@@ -19,6 +21,42 @@
 #include <rarexsec/processing/WeightProcessor.h>
 
 namespace proc {
+namespace {
+
+std::string sanitizePathComponent(std::string component) {
+    for (auto &ch : component) {
+        const auto c = static_cast<unsigned char>(ch);
+        if (!std::isalnum(c) && ch != '_' && ch != '-') {
+            ch = '_';
+        }
+    }
+    return component;
+}
+
+std::string buildNominalTreePath(const SampleKey &key) {
+    return key.str() + "/nominal";
+}
+
+std::string buildVariationTreePath(const SampleKey &core_key, const SampleVariationDefinition &variation_def) {
+    std::string component = variation_def.variation_label;
+    if (component.empty()) {
+        component = variation_def.sample_key.str();
+    }
+    component = sanitizePathComponent(component);
+    if (component.empty()) {
+        component = "variation";
+    }
+    return core_key.str() + "/variations/" + component;
+}
+
+std::string variationLabelForSummary(const SampleVariationDefinition &variation_def) {
+    if (!variation_def.variation_label.empty()) {
+        return variation_def.variation_label;
+    }
+    return variation_def.sample_key.str();
+}
+
+} // namespace
 
 AnalysisDataLoader::AnalysisDataLoader(const BeamPeriodConfigurationRegistry &run_config_registry,
                                        VariableRegistry variable_registry, std::string beam_mode,
@@ -50,24 +88,26 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
     opts.fCompressionLevel = 4;
     opts.fAutoFlush = 30 * 1024 * 1024;
 
-    const auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_name) mutable {
+    const auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_path) mutable {
         if (!filter_expr.empty()) {
             df = df.Filter(filter_expr);
         }
         opts.fMode = first ? "RECREATE" : "UPDATE";
-        df.Snapshot(tree_name, output_file, columns, opts);
+        df.Snapshot(tree_path, output_file, columns, opts);
         first = false;
     };
 
     for (auto const &[key, sample] : frames_) {
-        snapshot_tree(sample.nominalNode(), key.str());
+        const auto nominal_path = buildNominalTreePath(key);
+        snapshot_tree(sample.nominalNode(), nominal_path);
         for (const auto &variation_def : sample.variationDefinitions()) {
             const auto &variation_nodes = sample.variationNodes();
             auto it = variation_nodes.find(variation_def.variation);
             if (it == variation_nodes.end()) {
                 continue;
             }
-            snapshot_tree(it->second, variation_def.sample_key.str());
+            const auto variation_path = buildVariationTreePath(key, variation_def);
+            snapshot_tree(it->second, variation_path);
         }
     }
 
@@ -178,7 +218,8 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     totals_tree.Write("", TObject::kOverwrite);
 
     TTree samples_tree("samples", "Per-sample exposure summary");
-    std::string tree_name;
+    std::string tree_path;
+    std::string core_sample_key;
     std::string beam;
     std::string run_period;
     std::string dataset_id;
@@ -189,7 +230,8 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     double sample_pot;
     long sample_triggers;
 
-    samples_tree.Branch("tree_name", &tree_name);
+    samples_tree.Branch("tree_name", &tree_path);
+    samples_tree.Branch("core_sample_key", &core_sample_key);
     samples_tree.Branch("beam", &beam);
     samples_tree.Branch("run_period", &run_period);
     samples_tree.Branch("dataset_id", &dataset_id);
@@ -205,7 +247,8 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         beam = rc ? rc->beamMode() : std::string{};
         run_period = rc ? rc->runPeriod() : std::string{};
 
-        tree_name = key.str();
+        core_sample_key = key.str();
+        tree_path = buildNominalTreePath(key);
         dataset_id = sample.datasetId();
         relative_path = sample.relativePath();
         variation_label = "nominal";
@@ -216,14 +259,18 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         samples_tree.Fill();
 
         for (const auto &variation_def : sample.variationDefinitions()) {
-            tree_name = variation_def.sample_key.str();
+            core_sample_key = key.str();
+            tree_path = buildVariationTreePath(key, variation_def);
             dataset_id = variation_def.dataset_id;
             relative_path = variation_def.relative_path;
-            variation_label = variation_def.variation_label;
+            variation_label = variationLabelForSummary(variation_def);
             stage_name = variation_def.stage_name.empty() ? sample.stageName() : variation_def.stage_name;
             origin_label = originToString(sample.sampleOrigin());
             sample_pot = variation_def.pot;
             sample_triggers = variation_def.triggers;
+
+            beam = rc ? rc->beamMode() : std::string{};
+            run_period = rc ? rc->runPeriod() : std::string{};
 
             const auto *variation_rc = getRunConfigForSample(variation_def.sample_key);
             if (variation_rc) {
