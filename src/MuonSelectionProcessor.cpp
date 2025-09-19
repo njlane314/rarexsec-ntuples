@@ -20,11 +20,7 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
         [](const ROOT::RVec<float> &scores, const ROOT::RVec<float> &llr, const ROOT::RVec<float> &lengths,
            const ROOT::RVec<float> &dists, const ROOT::RVec<float> &start_x, const ROOT::RVec<float> &start_y,
            const ROOT::RVec<float> &start_z, const ROOT::RVec<float> &end_x, const ROOT::RVec<float> &end_y,
-           const ROOT::RVec<float> &end_z, const ROOT::RVec<unsigned> &gens, const ROOT::RVec<int> &hits_u,
-           const ROOT::RVec<int> &hits_v, const ROOT::RVec<int> &hits_y) {
-            (void)hits_u;
-            (void)hits_v;
-            (void)hits_y;
+           const ROOT::RVec<float> &end_z, const ROOT::RVec<unsigned> &gens) {
             ROOT::RVec<bool> mask(scores.size());
             const float min_x = 5.f;
             const float max_x = 251.f;
@@ -43,8 +39,7 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
             return mask;
         },
         {"track_shower_scores", "trk_llr_pid_v", "track_length", "track_distance_to_vertex", "track_start_x",
-         "track_start_y", "track_start_z", "track_end_x", "track_end_y", "track_end_z", "pfp_generations",
-         "n_hits_u", "n_hits_v", "n_hits_y"});
+         "track_start_y", "track_start_z", "track_end_x", "track_end_y", "track_end_z", "pfp_generations"});
 }
 
 ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df) const {
