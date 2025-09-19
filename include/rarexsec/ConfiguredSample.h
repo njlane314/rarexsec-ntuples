@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_CONFIGURED_SAMPLE_H
-#define RAREXSEC_CONFIGURED_SAMPLE_H
+#ifndef CONFIGURED_SAMPLE_H
+#define CONFIGURED_SAMPLE_H
 
 #include <filesystem>
 #include <map>

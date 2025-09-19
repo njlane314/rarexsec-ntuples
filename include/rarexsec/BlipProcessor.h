@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_BLIP_PROCESSOR_H
-#define RAREXSEC_BLIP_PROCESSOR_H
+#ifndef BLIP_PROCESSOR_H
+#define BLIP_PROCESSOR_H
 
 #include <string>
 

@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_SELECTION_QUERY_H
-#define RAREXSEC_SELECTION_QUERY_H
+#ifndef SELECTION_QUERY_H
+#define SELECTION_QUERY_H
 
 #include <string>
 #include <utility>
