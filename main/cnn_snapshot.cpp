@@ -8,7 +8,7 @@
 #include <rarexsec/BeamPeriodConfigurationLoader.h>
 #include <rarexsec/Logger.h>
 
-#include "RunnerCLI.h"
+#include "RunnerParser.h"
 
 namespace {
 

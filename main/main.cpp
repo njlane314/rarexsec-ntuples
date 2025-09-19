@@ -11,7 +11,7 @@
 #include <rarexsec/AnalysisDataLoader.h>
 #include <rarexsec/BeamPeriodConfigLoader.h>
 
-#include "RunnerCLI.h"
+#include "RunnerParser.h"
 
 int main(int argc, char **argv) {
     rarexsec::cli::CommandLineOptions options;

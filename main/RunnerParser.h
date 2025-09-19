@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_MAIN_RUNNERCLI_H
-#define RAREXSEC_MAIN_RUNNERCLI_H
+#ifndef RAREXSEC_MAIN_RUNNERPARSER_H
+#define RAREXSEC_MAIN_RUNNERPARSER_H
 
 #include <filesystem>
 #include <optional>
