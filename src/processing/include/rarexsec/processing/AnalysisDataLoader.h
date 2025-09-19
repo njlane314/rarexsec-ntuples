@@ -62,6 +62,7 @@ class AnalysisDataLoader {
     std::unique_ptr<IEventProcessor> chainEventProcessors(std::unique_ptr<Head> head, std::unique_ptr<Tail>... tail);
 
     void writeSnapshotMetadata(const std::string &output_file) const;
+    void reorganizeSnapshotTrees(const std::string &output_file) const;
 };
 
 template <typename Head, typename... Tail>

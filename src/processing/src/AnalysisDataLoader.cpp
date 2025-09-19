@@ -8,6 +8,9 @@
 #include "TTree.h"
 #include "ROOT/RDF/RSnapshotOptions.hxx"
 
+#include <cctype>
+#include <sstream>
+
 #include <rarexsec/logging/Logger.h>
 #include <rarexsec/processing/BlipProcessor.h>
 #include <rarexsec/processing/MuonSelectionProcessor.h>
@@ -17,6 +20,59 @@
 #include <rarexsec/processing/SampleTypes.h>
 #include <rarexsec/processing/TruthChannelProcessor.h>
 #include <rarexsec/processing/WeightProcessor.h>
+
+namespace {
+
+std::string sanitizeComponent(std::string value) {
+    std::string sanitized;
+    sanitized.reserve(value.size());
+    for (unsigned char ch : value) {
+        if (std::isalnum(ch) || ch == '_' || ch == '-') {
+            sanitized.push_back(static_cast<char>(ch));
+        } else {
+            sanitized.push_back('_');
+        }
+    }
+    if (sanitized.empty()) {
+        sanitized = "unnamed";
+    }
+    return sanitized;
+}
+
+std::vector<std::string> nominalDirectoryComponents(const proc::SampleKey &sample_key) {
+    return {"samples", sanitizeComponent(sample_key.str()), "nominal"};
+}
+
+std::vector<std::string> variationDirectoryComponents(const proc::SampleKey &base_key,
+                                                      const proc::SampleVariationDefinition &variation_def) {
+    std::string label = variation_def.variation_label;
+    if (label.empty()) {
+        label = proc::variationToKey(variation_def.variation);
+    }
+    return {"samples", sanitizeComponent(base_key.str()), "variations", sanitizeComponent(label)};
+}
+
+std::string componentsToPath(const std::vector<std::string> &components) {
+    std::ostringstream os;
+    for (std::size_t i = 0; i < components.size(); ++i) {
+        if (i != 0) {
+            os << '/';
+        }
+        os << components[i];
+    }
+    return os.str();
+}
+
+std::string nominalTreePath(const proc::SampleKey &sample_key) {
+    return componentsToPath(nominalDirectoryComponents(sample_key)) + "/events";
+}
+
+std::string variationTreePath(const proc::SampleKey &base_key,
+                              const proc::SampleVariationDefinition &variation_def) {
+    return componentsToPath(variationDirectoryComponents(base_key, variation_def)) + "/events";
+}
+
+} // namespace
 
 namespace proc {
 
@@ -76,6 +132,7 @@ void AnalysisDataLoader::snapshot(const std::string &filter_expr, const std::str
         return;
     }
 
+    reorganizeSnapshotTrees(output_file);
     writeSnapshotMetadata(output_file);
 }
 
@@ -178,7 +235,8 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     totals_tree.Write("", TObject::kOverwrite);
 
     TTree samples_tree("samples", "Per-sample exposure summary");
-    std::string tree_name;
+    std::string tree_path;
+    std::string sample_key_value;
     std::string beam;
     std::string run_period;
     std::string dataset_id;
@@ -189,7 +247,8 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
     double sample_pot;
     long sample_triggers;
 
-    samples_tree.Branch("tree_name", &tree_name);
+    samples_tree.Branch("tree_path", &tree_path);
+    samples_tree.Branch("sample_key", &sample_key_value);
     samples_tree.Branch("beam", &beam);
     samples_tree.Branch("run_period", &run_period);
     samples_tree.Branch("dataset_id", &dataset_id);
@@ -205,7 +264,8 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         beam = rc ? rc->beamMode() : std::string{};
         run_period = rc ? rc->runPeriod() : std::string{};
 
-        tree_name = key.str();
+        tree_path = nominalTreePath(key);
+        sample_key_value = key.str();
         dataset_id = sample.datasetId();
         relative_path = sample.relativePath();
         variation_label = "nominal";
@@ -216,10 +276,12 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         samples_tree.Fill();
 
         for (const auto &variation_def : sample.variationDefinitions()) {
-            tree_name = variation_def.sample_key.str();
+            tree_path = variationTreePath(key, variation_def);
+            sample_key_value = variation_def.sample_key.str();
             dataset_id = variation_def.dataset_id;
             relative_path = variation_def.relative_path;
-            variation_label = variation_def.variation_label;
+            variation_label = variation_def.variation_label.empty() ? variationToKey(variation_def.variation)
+                                                                    : variation_def.variation_label;
             stage_name = variation_def.stage_name.empty() ? sample.stageName() : variation_def.stage_name;
             origin_label = originToString(sample.sampleOrigin());
             sample_pot = variation_def.pot;
@@ -237,6 +299,62 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
 
     samples_tree.Write("", TObject::kOverwrite);
     file->cd();
+}
+
+void AnalysisDataLoader::reorganizeSnapshotTrees(const std::string &output_file) const {
+    std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "UPDATE")};
+    if (!file || file->IsZombie()) {
+        log::fatal("AnalysisDataLoader::reorganizeSnapshotTrees", "Failed to open snapshot output", output_file);
+    }
+
+    const auto ensureDirectory = [&](const std::vector<std::string> &components) {
+        TDirectory *current = file.get();
+        for (const auto &component : components) {
+            if (component.empty()) {
+                continue;
+            }
+            TDirectory *next = current->GetDirectory(component.c_str());
+            if (!next) {
+                next = current->mkdir(component.c_str());
+            }
+            if (!next) {
+                log::fatal("AnalysisDataLoader::reorganizeSnapshotTrees", "Failed to create directory component", component);
+            }
+            current = next;
+        }
+        return current;
+    };
+
+    const auto moveTree = [&](const std::string &tree_name, const std::vector<std::string> &components) {
+        if (tree_name.empty()) {
+            return;
+        }
+        TTree *tree = nullptr;
+        file->GetObject(tree_name.c_str(), tree);
+        if (!tree) {
+            log::warn("AnalysisDataLoader::reorganizeSnapshotTrees", "Could not locate snapshot tree", tree_name);
+            return;
+        }
+
+        TDirectory *target_dir = ensureDirectory(components);
+        tree->SetDirectory(target_dir);
+        tree->SetName("events");
+        target_dir->cd();
+        tree->Write("", TObject::kOverwrite);
+
+        file->cd();
+        file->Delete((tree_name + ";*").c_str());
+    };
+
+    for (auto const &[key, sample] : frames_) {
+        moveTree(key.str(), nominalDirectoryComponents(key));
+        for (const auto &variation_def : sample.variationDefinitions()) {
+            moveTree(variation_def.sample_key.str(), variationDirectoryComponents(key, variation_def));
+        }
+    }
+
+    file->cd();
+    file->Write("", TObject::kOverwrite);
 }
 
 }
