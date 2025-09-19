@@ -40,7 +40,7 @@ find_package(nlohmann_json ${RAREXSEC_JSON_VERSION} CONFIG REQUIRED)
 
 set(RAREXSEC_EXPORT_SET rarexsecTargets)
 
-add_subdirectory(libs)
+add_subdirectory(src)
 add_subdirectory(apps)
 
 if(BUILD_TESTING)
