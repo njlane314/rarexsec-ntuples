@@ -1,5 +1,5 @@
 #include <rarexsec/MuonSelectionProcessor.h>
-#include <rarexsec/Catalog.h>
+#include <rarexsec/Catalogue.h>
 
 #include <cmath>
 

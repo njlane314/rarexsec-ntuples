@@ -23,7 +23,7 @@ DEFAULT_RUN_DB = "/exp/uboone/data/uboonebeam/beamdb/run.db"
 HADD_TMPDIR = Path("/pnfs/uboone/scratch/users/nlane/tmp/") 
 MIN_FREE_GB = 5.0                                        
 DEFAULT_JOBS = min(8, os.cpu_count() or 1)               
-CATALOG_SUBDIR = "catalogs"                              
+CATALOGUE_SUBDIR = "catalogues"
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 
@@ -81,7 +81,7 @@ def runset_token(runs: list[str]) -> str:
         pass
     return ",".join(norm_run(r) for r in runs)
 
-def summarize_beams_for_name(beam_keys: list[str]) -> str:
+def summarise_beams_for_name(beam_keys: list[str]) -> str:
     beams = set(beam_keys)
     has_bnb = any(k.startswith("bnb") for k in beams)
     has_nu  = any(k.startswith("numi") for k in beams)
@@ -401,14 +401,14 @@ def default_xmls() -> list[Path]:
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    ap = argparse.ArgumentParser(description="Aggregate ROOT samples from a recipe into a catalog.")
+    ap = argparse.ArgumentParser(description="Aggregate ROOT samples from a recipe into a catalogue.")
     ap.add_argument("--recipe", type=Path, required=True, help="Path to recipe JSON (instance).")
     args = ap.parse_args()
 
     # Fixed defaults (no CLI flags)
     jobs = DEFAULT_JOBS
     run_db = DEFAULT_RUN_DB
-    outdir = repo_root / CATALOG_SUBDIR
+    outdir = repo_root / CATALOGUE_SUBDIR
 
     recipe_path = args.recipe
     with open(recipe_path) as f:
@@ -502,8 +502,8 @@ def main() -> None:
     outdir.mkdir(parents=True, exist_ok=True)
     out_path = outdir / "samples.json"
 
-    catalog = {
-        "role": "catalog",
+    catalogue = {
+        "role": "catalogue",
         "schema_version": SCHEMA_VERSION,
         "produced_at": produced_at,
         "source_recipe_path": str(recipe_path),
@@ -515,9 +515,9 @@ def main() -> None:
     }
 
     with open(out_path, "w") as f:
-        json.dump(catalog, f, indent=4)
+        json.dump(catalogue, f, indent=4)
 
-    logging.info("Wrote catalog: %s", out_path)
+    logging.info("Wrote catalogue: %s", out_path)
 
 if __name__ == "__main__":
     main()

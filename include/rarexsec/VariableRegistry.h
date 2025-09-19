@@ -368,10 +368,10 @@ private:
                                                "flash_match_score",
                                                "flash_total_pe",
                                                "flash_time",
-                                               "flash_z_center",
+                                               "flash_z_centre",
                                                "flash_z_width",
                                                "slice_charge",
-                                               "slice_z_center",
+                                               "slice_z_centre",
                                                "charge_light_ratio",
                                                "flash_slice_z_dist",
                                                "flash_pe_per_charge"};

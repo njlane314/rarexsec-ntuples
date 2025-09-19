@@ -1,5 +1,5 @@
 #include <rarexsec/ReconstructionProcessor.h>
-#include <rarexsec/Catalog.h>
+#include <rarexsec/Catalogue.h>
 
 namespace proc {
 

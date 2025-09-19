@@ -1,5 +1,5 @@
 {
-    "role": "catalog",
+    "role": "catalogue",
     "schema_version": "1.0",
     "produced_at": "2025-09-11T23:11:40+00:00",
     "source_recipe_path": "config/analysis-recipe.json",
