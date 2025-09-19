@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.16)
 
 project(rarexsec_processing VERSION 0.1.0 LANGUAGES CXX)
 
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/install" CACHE PATH "Installation prefix" FORCE)
+endif()
+
 include(CTest)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)

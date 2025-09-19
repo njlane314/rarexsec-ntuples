@@ -106,9 +106,10 @@ void AnalysisDataLoader::processRunConfig(const RunConfig &rc) {
         auto &proc = *processors_.back();
 
         SampleDefinition sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, proc};
+        const auto sample_key = sample.sampleKey();
 
-        run_config_cache_.emplace(sample.sampleKey(), &rc);
-        frames_.emplace(sample.sampleKey(), std::move(sample));
+        run_config_cache_.emplace(sample_key, &rc);
+        frames_.emplace(sample_key, std::move(sample));
     }
 }
 
