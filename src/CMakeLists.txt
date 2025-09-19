@@ -1,8 +1,8 @@
 set(rarexsec_processing_sources
     AnalysisDataLoader.cpp
-    BeamPeriodConfiguration.cpp
-    BeamPeriodConfigurationLoader.cpp
-    BeamPeriodConfigurationRegistry.cpp
+    BeamPeriodConfig.cpp
+    BeamPeriodConfigLoader.cpp
+    BeamPeriodConfigRegistry.cpp
     BlipProcessor.cpp
     ConfiguredSample.cpp
     MuonSelectionProcessor.cpp
