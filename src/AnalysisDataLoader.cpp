@@ -6,8 +6,10 @@
 #include "TTree.h"
 #include "ROOT/RDataFrame.hxx"
 
+#include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <string_view>
 
 #include <rarexsec/Logger.h>
 #include <rarexsec/BlipProcessor.h>
@@ -36,19 +38,6 @@ std::string sanitiseComponent(std::string value) {
     return sanitised;
 }
 
-std::vector<std::string> nominalDirectoryComponents(const proc::SampleKey &sample_key) {
-    return {"samples", sanitiseComponent(sample_key.str()), "nominal"};
-}
-
-std::vector<std::string> variationDirectoryComponents(const proc::SampleKey &base_key,
-                                                      const proc::SampleVariationDefinition &variation_def) {
-    std::string label = variation_def.variation_label;
-    if (label.empty()) {
-        label = proc::variationToKey(variation_def.variation);
-    }
-    return {"samples", sanitiseComponent(base_key.str()), "variations", sanitiseComponent(label)};
-}
-
 std::string componentsToPath(const std::vector<std::string> &components) {
     std::ostringstream os;
     for (std::size_t i = 0; i < components.size(); ++i) {
@@ -60,18 +49,82 @@ std::string componentsToPath(const std::vector<std::string> &components) {
     return os.str();
 }
 
-std::string nominalTreePath(const proc::SampleKey &sample_key) {
-    return componentsToPath(nominalDirectoryComponents(sample_key)) + "/events";
-}
+std::string normaliseBeamLabel(const std::string &beam_mode) {
+    std::string lower;
+    lower.reserve(beam_mode.size());
+    for (unsigned char ch : beam_mode) {
+        lower.push_back(static_cast<char>(std::tolower(ch)));
+    }
 
-std::string variationTreePath(const proc::SampleKey &base_key,
-                              const proc::SampleVariationDefinition &variation_def) {
-    return componentsToPath(variationDirectoryComponents(base_key, variation_def)) + "/events";
+    const auto contains = [&](std::string_view token) { return lower.find(token) != std::string::npos; };
+
+    if (contains("numi")) {
+        if (contains("rhc")) {
+            return "numi-rhc";
+        }
+        return "numi-fhc";
+    }
+
+    if (contains("bnb")) {
+        return "bnb";
+    }
+
+    std::string fallback = sanitiseComponent(beam_mode);
+    std::replace(fallback.begin(), fallback.end(), '_', '-');
+    if (fallback.empty()) {
+        return "unknown-beam";
+    }
+
+    return fallback;
 }
 
 } // namespace
 
 namespace proc {
+
+std::string AnalysisDataLoader::beamDirectoryComponent(const SampleKey &key) const {
+    const auto *rc = getRunConfigForSample(key);
+    std::string beam_mode = rc ? rc->beamMode() : beam_;
+    return normaliseBeamLabel(beam_mode);
+}
+
+std::string AnalysisDataLoader::originDirectoryComponent(SampleOrigin origin) {
+    switch (origin) {
+    case SampleOrigin::kExternal:
+        return "beam-off";
+    case SampleOrigin::kMonteCarlo:
+    case SampleOrigin::kDirt:
+    case SampleOrigin::kData:
+        return "beam-on";
+    default:
+        return "unknown-origin";
+    }
+}
+
+std::vector<std::string> AnalysisDataLoader::nominalDirectoryComponents(const SampleKey &key,
+                                                                        const ConfiguredSample &sample) const {
+    return {beamDirectoryComponent(key), originDirectoryComponent(sample.sampleOrigin()),
+            sanitiseComponent(key.str()), "nominal"};
+}
+
+std::vector<std::string> AnalysisDataLoader::variationDirectoryComponents(
+    const SampleKey &base_key, const ConfiguredSample &sample, const SampleVariationDefinition &variation_def) const {
+    std::string label = variation_def.variation_label;
+    if (label.empty()) {
+        label = variationToKey(variation_def.variation);
+    }
+    return {beamDirectoryComponent(base_key), originDirectoryComponent(sample.sampleOrigin()),
+            sanitiseComponent(base_key.str()), "variations", sanitiseComponent(label)};
+}
+
+std::string AnalysisDataLoader::nominalTreePath(const SampleKey &key, const ConfiguredSample &sample) const {
+    return componentsToPath(nominalDirectoryComponents(key, sample)) + "/events";
+}
+
+std::string AnalysisDataLoader::variationTreePath(const SampleKey &key, const ConfiguredSample &sample,
+                                                  const SampleVariationDefinition &variation_def) const {
+    return componentsToPath(variationDirectoryComponents(key, sample, variation_def)) + "/events";
+}
 
 AnalysisDataLoader::AnalysisDataLoader(const BeamPeriodConfigRegistry &run_config_registry,
                                        VariableRegistry variable_registry, std::string beam_mode,
@@ -251,7 +304,7 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         beam = rc ? rc->beamMode() : std::string{};
         run_period = rc ? rc->runPeriod() : std::string{};
 
-        tree_path = nominalTreePath(key);
+        tree_path = nominalTreePath(key, sample);
         sample_key_value = key.str();
         dataset_id = sample.datasetId();
         relative_path = sample.relativePath();
@@ -263,7 +316,7 @@ void AnalysisDataLoader::writeSnapshotMetadata(const std::string &output_file) c
         samples_tree.Fill();
 
         for (const auto &variation_def : sample.variationDefinitions()) {
-            tree_path = variationTreePath(key, variation_def);
+            tree_path = variationTreePath(key, sample, variation_def);
             sample_key_value = variation_def.sample_key.str();
             dataset_id = variation_def.dataset_id;
             relative_path = variation_def.relative_path;
@@ -333,10 +386,17 @@ void AnalysisDataLoader::reorganiseSnapshotTrees(const std::string &output_file)
         file->Delete((tree_name + ";*").c_str());
     };
 
+    const std::vector<std::string> required_beams = {"numi-fhc", "numi-rhc", "bnb"};
+    for (const auto &beam_dir : required_beams) {
+        ensureDirectory({beam_dir});
+        ensureDirectory({beam_dir, "beam-on"});
+        ensureDirectory({beam_dir, "beam-off"});
+    }
+
     for (auto const &[key, sample] : frames_) {
-        moveTree(key.str(), nominalDirectoryComponents(key));
+        moveTree(key.str(), nominalDirectoryComponents(key, sample));
         for (const auto &variation_def : sample.variationDefinitions()) {
-            moveTree(variation_def.sample_key.str(), variationDirectoryComponents(key, variation_def));
+            moveTree(variation_def.sample_key.str(), variationDirectoryComponents(key, sample, variation_def));
         }
     }
 

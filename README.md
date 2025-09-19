@@ -66,9 +66,9 @@ relative file paths.
     output.root
 ```
 
-The training pool command records the event identifiers, weights, truth-channel
-labels, and CNN-friendly image tensors while retaining the same snapshot layout
-as the main runner.
+The training pool command records the event identifiers, the unified
+`event_weight` branch, truth-channel labels, and CNN-friendly image tensors
+while retaining the same snapshot layout as the main runner.
 
 ## Snapshot layout
 
@@ -76,17 +76,35 @@ Snapshots follow a consistent directory structure inside the output ROOT file:
 
 ```text
 snapshot.root
-├── samples/
-│   └── <sample>/
-│       ├── nominal/
-│       │   └── events (TTree)
-│       └── variations/
-│           └── <variation>/
-│               └── events (TTree)
+├── numi-fhc/
+│   ├── beam-on/
+│   │   └── <sample>/
+│   │       ├── nominal/
+│   │       │   └── events (TTree)
+│   │       └── variations/
+│   │           └── <variation>/
+│   │               └── events (TTree)
+│   └── beam-off/
+│       └── <sample>/...
+├── numi-rhc/
+│   ├── beam-on/
+│   │   └── <sample>/...
+│   └── beam-off/
+│       └── <sample>/...
+├── bnb/
+│   ├── beam-on/
+│   │   └── <sample>/...
+│   └── beam-off/
+│       └── <sample>/...
 └── meta/
     ├── totals (TTree)
     └── samples (TTree)
 ```
+
+All three beam directories are created for every snapshot. When a category has
+no matching datasets the directory remains empty. The `beam-on` subdirectories
+collect data, dirt, and Monte Carlo samples while `beam-off` stores the external
+trigger datasets.
 
 - `meta/totals` stores the integrated POT and trigger counts across all samples.
 - `meta/samples` lists each nominal and detector-variation dataset together with

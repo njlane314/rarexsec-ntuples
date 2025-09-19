@@ -63,6 +63,15 @@ class AnalysisDataLoader {
 
     void writeSnapshotMetadata(const std::string &output_file) const;
     void reorganiseSnapshotTrees(const std::string &output_file) const;
+
+    std::string beamDirectoryComponent(const SampleKey &key) const;
+    static std::string originDirectoryComponent(SampleOrigin origin);
+    std::vector<std::string> nominalDirectoryComponents(const SampleKey &key, const ConfiguredSample &sample) const;
+    std::vector<std::string> variationDirectoryComponents(const SampleKey &base_key, const ConfiguredSample &sample,
+                                                          const SampleVariationDefinition &variation_def) const;
+    std::string nominalTreePath(const SampleKey &key, const ConfiguredSample &sample) const;
+    std::string variationTreePath(const SampleKey &key, const ConfiguredSample &sample,
+                                  const SampleVariationDefinition &variation_def) const;
 };
 
 template <typename Head, typename... Tail>
