@@ -1,6 +1,6 @@
 #include <rarexsec/processing/ReconstructionProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 ROOT::RDF::RNode ReconstructionProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     auto base_df = df.Define(

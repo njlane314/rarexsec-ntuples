@@ -5,7 +5,7 @@
 
 #include <rarexsec/utils/Logger.h>
 
-namespace analysis {
+namespace proc {
 
 void RunConfigLoader::loadFromJson(const nlohmann::json &data, RunConfigRegistry &registry) {
     if (data.contains("ntuple_base_directory") && data.at("ntuple_base_directory").is_string()) {

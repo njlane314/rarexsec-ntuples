@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace analysis {
+namespace proc {
 
 enum class SampleOrigin : unsigned int { kUnknown = 0, kData, kMonteCarlo, kExternal, kDirt };
 

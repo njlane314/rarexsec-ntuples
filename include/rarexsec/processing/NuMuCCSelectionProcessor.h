@@ -3,7 +3,7 @@
 
 #include <rarexsec/processing/IEventProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 class NuMuCCSelectionProcessor : public IEventProcessor {
   public:

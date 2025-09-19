@@ -5,7 +5,7 @@
 
 #include <rarexsec/utils/Logger.h>
 
-namespace analysis {
+namespace proc {
 
 RunConfig::RunConfig(const json &j, std::string beam_mode, std::string run_period)
     : beam_mode_(std::move(beam_mode)),

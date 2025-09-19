@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace analysis {
+namespace proc {
 
 class RunConfig {
   public:

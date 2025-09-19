@@ -14,7 +14,7 @@
 #include <rarexsec/processing/SelectionQuery.h>
 #include <rarexsec/processing/VariableRegistry.h>
 
-namespace analysis {
+namespace proc {
 
 class AnalysisDataLoader {
   public:

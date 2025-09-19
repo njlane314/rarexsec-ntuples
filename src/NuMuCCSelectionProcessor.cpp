@@ -1,6 +1,6 @@
 #include <rarexsec/processing/NuMuCCSelectionProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 ROOT::RDF::RNode NuMuCCSelectionProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     (void)st;

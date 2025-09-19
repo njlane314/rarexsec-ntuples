@@ -6,7 +6,7 @@
 
 #include <rarexsec/processing/IEventProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 class TruthChannelProcessor : public IEventProcessor {
   public:

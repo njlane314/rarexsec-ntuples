@@ -7,7 +7,7 @@
 
 #include <rarexsec/processing/SampleTypes.h>
 
-namespace analysis {
+namespace proc {
 
 class IEventProcessor {
   public:

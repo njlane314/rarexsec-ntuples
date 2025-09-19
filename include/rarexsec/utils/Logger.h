@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 
-namespace analysis::log {
+namespace proc::log {
 
 namespace detail {
 inline std::mutex &log_mutex() {

@@ -1,6 +1,6 @@
 #include <rarexsec/processing/BlipProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 ROOT::RDF::RNode BlipProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     (void)st;

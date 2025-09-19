@@ -1,6 +1,6 @@
 #include <rarexsec/processing/PreselectionProcessor.h>
 
-namespace analysis {
+namespace proc {
 
 ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     auto init_df = df;
