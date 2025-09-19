@@ -6,7 +6,7 @@
 #include "TObjString.h"
 #include "TROOT.h"
 #include "TTree.h"
-#include "ROOT/RDF/RSnapshotOptions.hxx"
+#include "ROOT/RDataFrame.hxx"
 
 #include <cctype>
 #include <sstream>
