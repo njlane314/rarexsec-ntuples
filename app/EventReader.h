@@ -1,5 +1,5 @@
-#ifndef RAREXSEC_MAIN_SNAPSHOTEXPLORER_H
-#define RAREXSEC_MAIN_SNAPSHOTEXPLORER_H
+#ifndef RAREXSEC_MAIN_EVENTREADER_H
+#define RAREXSEC_MAIN_EVENTREADER_H
 
 #include <ROOT/RDataFrame.hxx>
 #include <ROOT/RDF/TH1DModel.hxx>
@@ -25,7 +25,7 @@
 namespace rarexsec::examples {
 
 /**
- * @brief Metadata describing each processed sample stored in the snapshot file.
+ * @brief Metadata describing each processed sample stored in the input file.
  */
 struct SampleMetadata {
     std::string tree_name;
@@ -41,13 +41,13 @@ struct SampleMetadata {
 };
 
 /**
- * @brief Utility that reads metadata from a rarexsec snapshot ROOT file and provides
+ * @brief Utility that reads metadata from a rarexsec ROOT file and provides
  *        helpers to build ROOT::RDataFrame driven histograms.
  */
-class SnapshotExplorer {
+class EventReader {
   public:
     /**
-     * @brief Lightweight proxy providing convenience methods for a single snapshot sample.
+     * @brief Lightweight proxy providing convenience methods for a single sample.
      */
     class SampleView {
       public:
@@ -70,16 +70,16 @@ class SnapshotExplorer {
         }
 
       private:
-        SampleView(const SnapshotExplorer *owner, const SampleMetadata *metadata)
+        SampleView(const EventReader *owner, const SampleMetadata *metadata)
             : owner_(owner), metadata_(metadata) {}
 
-        const SnapshotExplorer *owner_ = nullptr;
+        const EventReader *owner_ = nullptr;
         const SampleMetadata *metadata_ = nullptr;
 
-        friend class SnapshotExplorer;
+        friend class EventReader;
     };
 
-    explicit SnapshotExplorer(std::string file_name) : file_name_(std::move(file_name)) { loadMetadata(); }
+    explicit EventReader(std::string file_name) : file_name_(std::move(file_name)) { loadMetadata(); }
 
     const std::string &fileName() const { return file_name_; }
 
@@ -118,13 +118,13 @@ class SnapshotExplorer {
     SampleView sample(const std::string &tree_name) const {
         auto view = trySample(tree_name);
         if (!view) {
-            throw std::runtime_error("SnapshotExplorer: unknown tree '" + tree_name + "' in " + file_name_);
+            throw std::runtime_error("EventReader: unknown tree '" + tree_name + "' in " + file_name_);
         }
         return *view;
     }
 
     /**
-     * @brief Construct an RDataFrame for the requested snapshot tree.
+     * @brief Construct an RDataFrame for the requested sample tree.
      */
     ROOT::RDF::RDataFrame dataFrame(const std::string &tree_name) const {
         requireSample(tree_name);
@@ -167,7 +167,7 @@ class SnapshotExplorer {
     const SampleMetadata &requireSample(const std::string &tree_name) const {
         auto it = sample_index_.find(tree_name);
         if (it == sample_index_.end()) {
-            throw std::runtime_error("SnapshotExplorer: unknown tree '" + tree_name + "' in " + file_name_);
+            throw std::runtime_error("EventReader: unknown tree '" + tree_name + "' in " + file_name_);
         }
         return samples_.at(it->second);
     }
@@ -175,12 +175,12 @@ class SnapshotExplorer {
     void loadMetadata() {
         std::unique_ptr<TFile> file{TFile::Open(file_name_.c_str(), "READ")};
         if (!file || file->IsZombie()) {
-            throw std::runtime_error("SnapshotExplorer: unable to open file " + file_name_);
+            throw std::runtime_error("EventReader: unable to open file " + file_name_);
         }
 
         TDirectory *meta_dir = file->GetDirectory("meta");
         if (!meta_dir) {
-            throw std::runtime_error("SnapshotExplorer: missing 'meta' directory in " + file_name_);
+            throw std::runtime_error("EventReader: missing 'meta' directory in " + file_name_);
         }
 
         total_pot_ = 0.0;
@@ -240,4 +240,4 @@ class SnapshotExplorer {
 
 } // namespace rarexsec::examples
 
-#endif // RAREXSEC_MAIN_SNAPSHOTEXPLORER_H
+#endif // RAREXSEC_MAIN_EVENTREADER_H

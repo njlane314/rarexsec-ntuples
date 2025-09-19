@@ -1,7 +1,7 @@
 // This ROOT macro is kept in the app directory as a lightweight example that can
-// be imitated when scripting custom snapshot exploration workflows.
+// be imitated when scripting custom event reading workflows.
 
-#include "SnapshotExplorer.h"
+#include "EventReader.h"
 
 #include "TCanvas.h"
 #include "TColor.h"
@@ -14,7 +14,7 @@
 #include <string>
 
 using rarexsec::examples::SampleMetadata;
-using rarexsec::examples::SnapshotExplorer;
+using rarexsec::examples::EventReader;
 
 //
 // Example usage from the ROOT prompt:
@@ -26,15 +26,15 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
                   const char *column = "reco_nu_energy", int bins = 40, double min = 0.0, double max = 4.0,
                   const char *selection = "", const char *weight_column = "") {
     try {
-        SnapshotExplorer snapshot(file_name);
+        EventReader reader(file_name);
 
-        std::cout << "Opened snapshot file: " << snapshot.fileName() << '\n';
-        std::cout << "  Total POT: " << snapshot.totalPOT() << '\n';
-        std::cout << "  Total triggers: " << snapshot.totalTriggers() << '\n';
+        std::cout << "Opened event file: " << reader.fileName() << '\n';
+        std::cout << "  Total POT: " << reader.totalPOT() << '\n';
+        std::cout << "  Total triggers: " << reader.totalTriggers() << '\n';
 
-        if (!snapshot.samples().empty()) {
+        if (!reader.samples().empty()) {
             std::cout << "\nSamples in the file:" << '\n';
-            for (const SampleMetadata &metadata : snapshot.samples()) {
+            for (const SampleMetadata &metadata : reader.samples()) {
                 std::cout << "  - " << metadata.tree_name << " (beam=" << metadata.beam << ", period="
                           << metadata.run_period << ", dataset=" << metadata.dataset_id << ")" << '\n';
                 std::cout << "      stage=" << metadata.stage << ", variation=" << metadata.variation
@@ -46,7 +46,7 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
 
         std::string tree_to_plot = (tree_name && tree_name[0]) ? tree_name : std::string{};
         if (tree_to_plot.empty()) {
-            auto trees = snapshot.treeNames();
+            auto trees = reader.treeNames();
             if (trees.empty()) {
                 std::cerr << "No TTrees were found in " << file_name << std::endl;
                 return;
@@ -55,7 +55,7 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
             std::cout << "\nNo tree provided, defaulting to: " << tree_to_plot << '\n';
         }
 
-        const auto sample_view = snapshot.sample(tree_to_plot);
+        const auto sample_view = reader.sample(tree_to_plot);
         const SampleMetadata &chosen_sample = sample_view.metadata();
 
         std::cout << "\nDrawing histogram from tree: " << chosen_sample.tree_name << '\n';
@@ -77,8 +77,8 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
         TLatex label;
         label.SetNDC();
         label.SetTextSize(0.03);
-        label.DrawLatex(0.55, 0.86, Form("Total POT = %.2e", snapshot.totalPOT()));
-        label.DrawLatex(0.55, 0.82, Form("Total triggers = %ld", snapshot.totalTriggers()));
+        label.DrawLatex(0.55, 0.86, Form("Total POT = %.2e", reader.totalPOT()));
+        label.DrawLatex(0.55, 0.82, Form("Total triggers = %ld", reader.totalTriggers()));
         label.DrawLatex(0.55, 0.78, Form("Entries = %.0f", hist->GetEntries()));
 
         const std::string output_name = hist_name + ".png";
