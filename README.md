@@ -3,6 +3,17 @@
 This repository provides a small processing library and a command-line runner
 for assembling ROOT `RDataFrame` pipelines driven by configuration JSON files.
 
+## Repository layout
+
+The source tree is organised to make the separation between the reusable
+library, headers, and executables explicit:
+
+- `include/rarexsec/` – public headers for the processing library.
+- `src/processing/` – implementation sources for the processing library.
+- `apps/rarexsec-runner/` – command-line interface that links against the
+  processing library.
+- `config/` – sample configuration files and helper scripts.
+
 ## Build requirements
 
 The project relies on the following external dependencies:
