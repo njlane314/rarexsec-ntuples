@@ -64,3 +64,74 @@ If an output file is provided the selected events are snapshotted into that ROOT
 file; otherwise the available branches for the configured samples are printed to
 standard output.
 
+## Snapshot output layout
+
+When an output file is requested the runner writes a structured ROOT file to
+make interactive browsing and downstream analysis easier:
+
+- `samples/<sample>/nominal/events` contains the nominal event tree for each
+  configured sample.
+- `samples/<sample>/variations/<variation>/events` holds detector systematics
+  associated with that sample. Variation names are normalised so that any
+  characters outside `[A-Za-z0-9_-]` are replaced with underscores.
+- `meta/totals` captures the integrated POT and trigger counts across all
+  processed samples.
+- `meta/samples` summarises each nominal and variation entry with branches such
+  as `sample_key`, `dataset_id`, and the resolved `tree_path` pointing to the
+  location of the corresponding events tree.
+
+The `<sample>` directory component is derived from the sample key in the recipe
+after applying the same character normalisation described above, so keys such as
+`mc_inclusive_run1_fhc` stay readable while more elaborate identifiers are still
+legal ROOT directory names.
+
+To explore the output interactively you can drop the following helper macro into
+`rarexsec_snapshot_example.C` and run it from a ROOT session. It loops over the
+metadata tree, grabs each nominal tree, and prints its entry count:
+
+```cpp
+#include <iostream>
+#include <string>
+
+#include "TFile.h"
+#include "TTree.h"
+
+void rarexsec_snapshot_example(const char *filename = "snapshot.root") {
+    TFile input(filename, "READ");
+    if (input.IsZombie()) {
+        std::cerr << "Could not open " << filename << "\n";
+        return;
+    }
+
+    auto *meta = static_cast<TTree *>(input.Get("meta/samples"));
+    if (!meta) {
+        std::cerr << "meta/samples tree is missing\n";
+        return;
+    }
+
+    std::string tree_path;
+    std::string sample_key;
+    meta->SetBranchAddress("tree_path", &tree_path);
+    meta->SetBranchAddress("sample_key", &sample_key);
+
+    for (Long64_t entry = 0; entry < meta->GetEntries(); ++entry) {
+        meta->GetEntry(entry);
+        if (tree_path.find("/nominal/") == std::string::npos) {
+            continue; // only inspect the nominal samples in this example
+        }
+
+        auto *events = static_cast<TTree *>(input.Get(tree_path.c_str()));
+        if (!events) {
+            std::cerr << "Tree not found: " << tree_path << "\n";
+            continue;
+        }
+        std::cout << sample_key << " -> " << tree_path << " has "
+                  << events->GetEntries() << " entries\n";
+    }
+}
+```
+
+The macro demonstrates how to rely on the metadata summary rather than hard
+coding paths; more elaborate scripts can branch on `variation` or `origin` to
+automate detector variation studies.
+
