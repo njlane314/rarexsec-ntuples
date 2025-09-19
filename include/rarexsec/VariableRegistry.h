@@ -1,6 +1,7 @@
 #ifndef EVENT_VARIABLE_REGISTRY_H
 #define EVENT_VARIABLE_REGISTRY_H
 
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -11,89 +12,129 @@
 namespace proc {
 
 class VariableRegistry {
-public:
-  using KnobVariations =
-      std::unordered_map<std::string, std::pair<std::string, std::string>>;
-  using MultiUniverseVars = std::unordered_map<std::string, unsigned>;
+  public:
+    using KnobVariations =
+        std::unordered_map<std::string, std::pair<std::string, std::string>>;
+    using MultiUniverseVars = std::unordered_map<std::string, unsigned>;
+    using ColumnCollection = std::vector<std::string>;
 
-  static const KnobVariations &knobVariations() {
-    static const KnobVariations m = {
-        {"RPA", {"knobRPAup", "knobRPAdn"}},
-        {"CCMEC", {"knobCCMECup", "knobCCMECdn"}},
-        {"AxFFCCQE", {"knobAxFFCCQEup", "knobAxFFCCQEdn"}},
-        {"VecFFCCQE", {"knobVecFFCCQEup", "knobVecFFCCQEdn"}},
-        {"DecayAngMEC", {"knobDecayAngMECup", "knobDecayAngMECdn"}},
-        {"ThetaDelta2Npi", {"knobThetaDelta2Npiup", "knobThetaDelta2Npidn"}},
-        {"ThetaDelta2NRad", {"knobThetaDelta2NRadup", "knobThetaDelta2NRaddn"}},
-        {"NormCCCOH", {"knobNormCCCOHup", "knobNormCCCOHdn"}},
-        {"NormNCCOH", {"knobNormNCCOHup", "knobNormNCCOHdn"}},
-        {"xsr_scc_Fv3", {"knobxsr_scc_Fv3up", "knobxsr_scc_Fv3dn"}},
-        {"xsr_scc_Fa3", {"knobxsr_scc_Fa3up", "knobxsr_scc_Fa3dn"}}};
+    void includeCommonColumn(const std::string &column) { common_columns_.push_back(column); }
 
-    return m;
-  }
-
-  static const MultiUniverseVars &multiUniverseVariations() {
-    static const MultiUniverseVars m = {{"weightsGenie", 500},
-                                        {"weightsFlux", 500},
-                                        {"weightsReint", 500},
-                                        {"weightsPPFX", 500}};
-
-    return m;
-  }
-
-  static const std::string &singleKnobVar() {
-    static const std::string s = "RootinoFix";
-
-    return s;
-  }
-
-  static std::vector<std::string> eventVariables(SampleOrigin type) {
-    auto vars = collectBaseGroups();
-
-    if (type == SampleOrigin::kMonteCarlo || type == SampleOrigin::kDirt)
-      appendMonteCarloGroups(vars);
-
-    return std::vector<std::string>(vars.begin(), vars.end());
-  }
-
-private:
-  static std::unordered_set<std::string> collectBaseGroups() {
-    std::unordered_set<std::string> vars{baseVariables().begin(),
-                                         baseVariables().end()};
-
-    vars.insert(recoEventVariables().begin(), recoEventVariables().end());
-    vars.insert(recoTrackVariables().begin(), recoTrackVariables().end());
-    vars.insert(processedEventVariables().begin(),
-                processedEventVariables().end());
-    vars.insert(blipVariables().begin(), blipVariables().end());
-    vars.insert(imageVariables().begin(), imageVariables().end());
-    vars.insert(flashVariables().begin(), flashVariables().end());
-    vars.insert(energyVariables().begin(), energyVariables().end());
-    vars.insert(sliceVariables().begin(), sliceVariables().end());
-
-    return vars;
-  }
-
-  static void appendMonteCarloGroups(std::unordered_set<std::string> &vars) {
-    vars.insert(truthVariables().begin(), truthVariables().end());
-
-    for (auto &kv : knobVariations()) {
-      vars.insert(kv.second.first);
-      vars.insert(kv.second.second);
+    void includeCommonColumns(const ColumnCollection &columns) {
+        common_columns_.insert(common_columns_.end(), columns.begin(), columns.end());
     }
 
-    for (auto &kv : multiUniverseVariations())
-      vars.insert(kv.first);
+    void includeColumn(SampleOrigin origin, const std::string &column) {
+        origin_columns_[origin].push_back(column);
+    }
 
-    vars.insert(singleKnobVar());
-  }
+    void includeColumns(SampleOrigin origin, const ColumnCollection &columns) {
+        auto &bucket = origin_columns_[origin];
+        bucket.insert(bucket.end(), columns.begin(), columns.end());
+    }
 
-  static const std::vector<std::string> &baseVariables() {
-    static const std::vector<std::string> v = {"run", "sub", "evt"};
+    ColumnCollection columnsFor(SampleOrigin type) const {
+        ColumnCollection columns = eventVariables(type);
+        std::unordered_set<std::string> seen(columns.begin(), columns.end());
 
-    return v;
-  }
+        for (const auto &column : common_columns_) {
+            if (seen.insert(column).second) {
+                columns.push_back(column);
+            }
+        }
+
+        auto it = origin_columns_.find(type);
+        if (it != origin_columns_.end()) {
+            for (const auto &column : it->second) {
+                if (seen.insert(column).second) {
+                    columns.push_back(column);
+                }
+            }
+        }
+
+        return columns;
+    }
+
+    static const KnobVariations &knobVariations() {
+        static const KnobVariations m = {
+            {"RPA", {"knobRPAup", "knobRPAdn"}},
+            {"CCMEC", {"knobCCMECup", "knobCCMECdn"}},
+            {"AxFFCCQE", {"knobAxFFCCQEup", "knobAxFFCCQEdn"}},
+            {"VecFFCCQE", {"knobVecFFCCQEup", "knobVecFFCCQEdn"}},
+            {"DecayAngMEC", {"knobDecayAngMECup", "knobDecayAngMECdn"}},
+            {"ThetaDelta2Npi", {"knobThetaDelta2Npiup", "knobThetaDelta2Npidn"}},
+            {"ThetaDelta2NRad", {"knobThetaDelta2NRadup", "knobThetaDelta2NRaddn"}},
+            {"NormCCCOH", {"knobNormCCCOHup", "knobNormCCCOHdn"}},
+            {"NormNCCOH", {"knobNormNCCOHup", "knobNormNCCOHdn"}},
+            {"xsr_scc_Fv3", {"knobxsr_scc_Fv3up", "knobxsr_scc_Fv3dn"}},
+            {"xsr_scc_Fa3", {"knobxsr_scc_Fa3up", "knobxsr_scc_Fa3dn"}}};
+
+        return m;
+    }
+
+    static const MultiUniverseVars &multiUniverseVariations() {
+        static const MultiUniverseVars m = {{"weightsGenie", 500},
+                                            {"weightsFlux", 500},
+                                            {"weightsReint", 500},
+                                            {"weightsPPFX", 500}};
+
+        return m;
+    }
+
+    static const std::string &singleKnobVar() {
+        static const std::string s = "RootinoFix";
+
+        return s;
+    }
+
+    static std::vector<std::string> eventVariables(SampleOrigin type) {
+        auto vars = collectBaseGroups();
+
+        if (type == SampleOrigin::kMonteCarlo || type == SampleOrigin::kDirt) {
+            appendMonteCarloGroups(vars);
+        }
+
+        return std::vector<std::string>(vars.begin(), vars.end());
+    }
+
+  private:
+    static std::unordered_set<std::string> collectBaseGroups() {
+        std::unordered_set<std::string> vars{baseVariables().begin(), baseVariables().end()};
+
+        vars.insert(recoEventVariables().begin(), recoEventVariables().end());
+        vars.insert(recoTrackVariables().begin(), recoTrackVariables().end());
+        vars.insert(processedEventVariables().begin(), processedEventVariables().end());
+        vars.insert(blipVariables().begin(), blipVariables().end());
+        vars.insert(imageVariables().begin(), imageVariables().end());
+        vars.insert(flashVariables().begin(), flashVariables().end());
+        vars.insert(energyVariables().begin(), energyVariables().end());
+        vars.insert(sliceVariables().begin(), sliceVariables().end());
+
+        return vars;
+    }
+
+    static void appendMonteCarloGroups(std::unordered_set<std::string> &vars) {
+        vars.insert(truthVariables().begin(), truthVariables().end());
+
+        for (auto &kv : knobVariations()) {
+            vars.insert(kv.second.first);
+            vars.insert(kv.second.second);
+        }
+
+        for (auto &kv : multiUniverseVariations()) {
+            vars.insert(kv.first);
+        }
+
+        vars.insert(singleKnobVar());
+        vars.insert("weightSpline");
+        vars.insert("weightTune");
+    }
+
+    static const std::vector<std::string> &baseVariables() {
+        static const std::vector<std::string> v = {"run", "sub", "evt"};
+
+        return v;
+    }
 
   static const std::vector<std::string> &truthVariables() {
     static const std::vector<std::string> v = {
@@ -461,7 +502,7 @@ private:
     return v;
   }
 
-  static const std::vector<std::string> &processedEventVariables() {
+    static const std::vector<std::string> &processedEventVariables() {
     static const std::vector<std::string> v = {"in_reco_fiducial",
                                                "reco_neutrino_vertex_sce_x",
                                                "reco_neutrino_vertex_sce_y",
@@ -492,10 +533,24 @@ private:
                                                "mc_n_proton",
                                                "genie_int_mode",
                                                "incl_channel",
-                                               "excl_channel"};
+                                               "excl_channel",
+                                               "inclusive_strange_channels",
+                                               "exclusive_strange_channels",
+                                               "channel_def",
+                                               "channel_definitions",
+                                               "is_truth_signal",
+                                               "pure_slice_signal",
+                                               "pass_pre",
+                                               "pass_flash",
+                                               "pass_fv",
+                                               "pass_mu",
+                                               "pass_topo",
+                                               "pass_final"};
 
     return v;
   }
+    std::vector<std::string> common_columns_;
+    std::map<SampleOrigin, std::vector<std::string>> origin_columns_;
 };
 
 }
