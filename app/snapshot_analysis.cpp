@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#include "ROOT/RDataFrame.hxx"
+
 #include <rarexsec/LoggerUtils.h>
 #include <rarexsec/SnapshotPipelineBuilder.h>
 #include <rarexsec/RunConfigLoader.h>
@@ -126,6 +128,9 @@ int main(int argc, char **argv) {
     }
 
     try {
+        proc::log::info("snapshot-analysis", "Enabling ROOT implicit MT with the maximum available threads");
+        ROOT::EnableImplicitMT();
+
         proc::SnapshotPipelineBuilder builder(registry, proc::VariableRegistry{}, resolved_beam, resolved_periods,
                                               *base_dir);
         if (options.output) {

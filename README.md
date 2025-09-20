@@ -86,6 +86,8 @@ relative file paths.
   `snapshot_fhc_r1-3_nuepre.root`.
 - Snapshots include only the curated branch list defined in
   `requestedSnapshotColumns()` within `app/snapshot_analysis.cpp`.
+- ROOT's implicit multi-threading is enabled automatically with the maximum
+  available threads.
 
 ### Snapshot training tool
 
@@ -103,6 +105,8 @@ labels, and CNN-friendly image tensors while retaining the same snapshot layout
 as the snapshot analysis tool. It honours the same period syntax as
 `snapshot-analysis`, so comma-separated lists (`run1,run2,run3`) or additional
 run tokens supplied as separate arguments are all valid.
+- ROOT's implicit multi-threading is enabled automatically with the maximum
+  available threads.
 
 ## Snapshot layout
 
