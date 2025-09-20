@@ -5,7 +5,7 @@
 
 #include <rarexsec/SnapshotPipelineBuilder.h>
 #include <rarexsec/RunConfigLoader.h>
-#include <rarexsec/Logger.h>
+#include <rarexsec/LoggingUtilities.h>
 #include <rarexsec/Selections.h>
 
 #include "RunnerParser.h"
