@@ -65,7 +65,7 @@ ROOT::RDF::RNode TruthChannelProcessor::processNonMc(ROOT::RDF::RNode df, Sample
 ROOT::RDF::RNode TruthChannelProcessor::defineCounts(ROOT::RDF::RNode df) const {
     auto fid_df = df.Define(
         "in_fiducial",
-        [](float x, float y, float z) { return selection::isInFiducialVolume(x, y, z); },
+        [](float x, float y, float z) { return ::proc::isInFiducialVolume(x, y, z); },
         {"neutrino_vertex_x", "neutrino_vertex_y", "neutrino_vertex_z"});
 
     auto strange_df = fid_df.Define(
