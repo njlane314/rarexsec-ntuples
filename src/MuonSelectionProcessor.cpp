@@ -48,10 +48,8 @@ ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df
                      .Define("muon_trk_end_y_v", selection::filterByMask<float>, {"track_end_y", "muon_mask"})
                      .Define("muon_trk_end_z_v", selection::filterByMask<float>, {"track_end_z", "muon_mask"})
                      .Define("muon_trk_length_v", selection::filterByMask<float>, {"track_length", "muon_mask"})
-                     .Define("muon_trk_distance_v", selection::filterByMask<float>,
-                             {"track_distance_to_vertex", "muon_mask"})
-                     .Define("muon_pfp_generation_v", selection::filterByMask<unsigned>,
-                             {"pfp_generations", "muon_mask"})
+                     .Define("muon_trk_distance_v", selection::filterByMask<float>, {"track_distance_to_vertex", "muon_mask"})
+                     .Define("muon_pfp_generation_v", selection::filterByMask<unsigned>, {"pfp_generations", "muon_mask"})
                      .Define(
                          "muon_track_costheta",
                              [](const ROOT::RVec<float> &theta, const ROOT::RVec<bool> &mask) {
