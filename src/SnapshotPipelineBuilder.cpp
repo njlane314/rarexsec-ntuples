@@ -188,15 +188,38 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     } else {
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Filter expression:", filter_expr);
     }
-    if (columns.empty()) {
+
+    const std::vector<std::string> *snapshot_columns = &columns;
+    std::vector<std::string> deduplicated_columns;
+    if (!columns.empty()) {
+        std::unordered_set<std::string> seen_columns;
+        seen_columns.reserve(columns.size());
+        deduplicated_columns.reserve(columns.size());
+        for (const auto &column : columns) {
+            if (seen_columns.insert(column).second) {
+                deduplicated_columns.push_back(column);
+            } else {
+                log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "Duplicate snapshot column", column,
+                          "will be ignored");
+            }
+        }
+        if (deduplicated_columns.size() != columns.size()) {
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Removed",
+                      columns.size() - deduplicated_columns.size(),
+                      "duplicate column entries from snapshot request");
+            snapshot_columns = &deduplicated_columns;
+        }
+    }
+
+    if (snapshot_columns->empty()) {
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No explicit column list provided");
     } else {
         std::ostringstream column_stream;
-        for (std::size_t i = 0; i < columns.size(); ++i) {
+        for (std::size_t i = 0; i < snapshot_columns->size(); ++i) {
             if (i != 0) {
                 column_stream << ", ";
             }
-            column_stream << columns[i];
+            column_stream << snapshot_columns->at(i);
         }
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Requested columns:", column_stream.str());
     }
@@ -357,7 +380,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Writing tree",
                   directory_path + '/' + kEventsTreeName, "to", output_file);
         auto tree_opts = opts;
-        df.Snapshot(kEventsTreeName, dir_it->second, columns, tree_opts);
+        df.Snapshot(kEventsTreeName, output_file, *snapshot_columns, tree_opts);
+        relocateTreeToDirectory(directory_path);
         wrote_anything = true;
         ++processed_trees;
         log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/', total_trees,
