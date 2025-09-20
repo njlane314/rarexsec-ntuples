@@ -1,7 +1,9 @@
 #ifndef EVENT_VARIABLE_REGISTRY_H
 #define EVENT_VARIABLE_REGISTRY_H
 
+#include <cctype>
 #include <map>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -59,42 +61,59 @@ class VariableRegistry {
         includeRequiredColumns(origin, columns);
     }
 
+    void setBeamMode(const std::string &beam) {
+        beam_mode_ = beam;
+        canonical_beam_mode_ = canonicaliseBeamName(beam_mode_);
+    }
+
     ColumnPlan columnPlanFor(SampleOrigin type) const {
         ColumnPlan plan;
         std::unordered_set<std::string> required_seen;
-        for (const auto &column : eventVariables(type)) {
+        std::unordered_set<std::string> optional_seen;
+
+        auto consider_required = [&, this](const std::string &column) {
+            if (this->isCompatibilityOptionalColumn(column)) {
+                if (!required_seen.count(column) && optional_seen.insert(column).second) {
+                    plan.optional.push_back(column);
+                }
+                return;
+            }
             if (required_seen.insert(column).second) {
                 plan.required.push_back(column);
             }
+        };
+
+        auto consider_optional = [&](const std::string &column) {
+            if (required_seen.count(column)) {
+                return;
+            }
+            if (optional_seen.insert(column).second) {
+                plan.optional.push_back(column);
+            }
+        };
+
+        for (const auto &column : eventVariables(type)) {
+            consider_required(column);
         }
 
         for (const auto &column : common_required_columns_) {
-            if (required_seen.insert(column).second) {
-                plan.required.push_back(column);
-            }
+            consider_required(column);
         }
 
         auto origin_it = origin_column_plans_.find(type);
         if (origin_it != origin_column_plans_.end()) {
             for (const auto &column : origin_it->second.required) {
-                if (required_seen.insert(column).second) {
-                    plan.required.push_back(column);
-                }
+                consider_required(column);
             }
         }
 
-        std::unordered_set<std::string> optional_seen;
         for (const auto &column : common_optional_columns_) {
-            if (!required_seen.count(column) && optional_seen.insert(column).second) {
-                plan.optional.push_back(column);
-            }
+            consider_optional(column);
         }
 
         if (origin_it != origin_column_plans_.end()) {
             for (const auto &column : origin_it->second.optional) {
-                if (!required_seen.count(column) && optional_seen.insert(column).second) {
-                    plan.optional.push_back(column);
-                }
+                consider_optional(column);
             }
         }
 
@@ -153,6 +172,79 @@ class VariableRegistry {
     }
 
   private:
+    static const std::unordered_set<std::string> &numiSplitTriggerColumns() {
+        static const std::unordered_set<std::string> columns = {
+            "software_trigger_post",
+            "software_trigger_post_ext",
+            "software_trigger_pre",
+            "software_trigger_pre_ext"};
+
+        return columns;
+    }
+
+    static const std::unordered_set<std::string> &compatibilityOptionalColumns() {
+        return numiSplitTriggerColumns();
+    }
+
+    static bool isNumiSplitTriggerColumn(const std::string &column) {
+        return numiSplitTriggerColumns().count(column) != 0;
+    }
+
+    static const std::string &legacySoftwareTriggerColumn() {
+        static const std::string column = "software_trigger";
+        return column;
+    }
+
+    static bool isLegacySoftwareTriggerColumn(const std::string &column) {
+        return column == legacySoftwareTriggerColumn();
+    }
+
+    std::optional<bool> compatibilityOverrideFor(const std::string &column) const {
+        if (!isNumiBeam()) {
+            return std::nullopt;
+        }
+
+        if (isNumiSplitTriggerColumn(column)) {
+            // Uncomment next line after NuMI ntuples provide split trigger branches.
+            // return std::optional<bool>{false};
+        }
+
+        if (isLegacySoftwareTriggerColumn(column)) {
+            // Uncomment next line after NuMI ntuples provide split trigger branches.
+            // return std::optional<bool>{true};
+        }
+
+        return std::nullopt;
+    }
+
+    bool isCompatibilityOptionalColumn(const std::string &column) const {
+        if (const auto override = compatibilityOverrideFor(column)) {
+            return *override;
+        }
+        return compatibilityOptionalColumns().count(column) != 0;
+    }
+
+    bool isNumiBeam() const {
+        return canonical_beam_mode_.size() >= 4 && canonical_beam_mode_.compare(0, 4, "numi") == 0;
+    }
+
+    static std::string canonicaliseBeamName(const std::string &beam) {
+        const auto begin = beam.find_first_not_of(" \t\n\r");
+        if (begin == std::string::npos) {
+            return {};
+        }
+        const auto end = beam.find_last_not_of(" \t\n\r");
+        std::string canonical = beam.substr(begin, end - begin + 1);
+        for (char &ch : canonical) {
+            if (ch == '_') {
+                ch = '-';
+            } else {
+                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            }
+        }
+        return canonical;
+    }
+
     static std::unordered_set<std::string> collectBaseGroups() {
         std::unordered_set<std::string> vars{baseVariables().begin(), baseVariables().end()};
 
@@ -456,8 +548,7 @@ class VariableRegistry {
                                                "event_semantic_counts_w",
                                                "is_vtx_in_image_u",
                                                "is_vtx_in_image_v",
-                                               "is_vtx_in_image_w",
-                                               "inference_score"};
+                                               "is_vtx_in_image_w"};
 
     return v;
   }
@@ -467,10 +558,10 @@ class VariableRegistry {
                                                "flash_match_score",
                                                "flash_total_pe",
                                                "flash_time",
-                                               "flash_z_centre",
+                                               "flash_z_center",
                                                "flash_z_width",
                                                "slice_charge",
-                                               "slice_z_centre",
+                                               "slice_z_center",
                                                "charge_light_ratio",
                                                "flash_slice_z_dist",
                                                "flash_pe_per_charge"};
@@ -581,7 +672,6 @@ class VariableRegistry {
                                                "muon_trk_length_v",
                                                "muon_trk_distance_v",
                                                "muon_pfp_generation_v",
-                                               "muon_trk_range_muon_mom_v",
                                                "muon_track_costheta",
                                                "base_event_weight",
                                                "nominal_event_weight",
@@ -604,9 +694,12 @@ class VariableRegistry {
 
     return v;
   }
+
     ColumnCollection common_required_columns_;
     ColumnCollection common_optional_columns_;
     std::map<SampleOrigin, ColumnPlan> origin_column_plans_;
+    std::string beam_mode_;
+    std::string canonical_beam_mode_;
 };
 
 }
