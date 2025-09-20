@@ -229,8 +229,10 @@ class EventReader {
     }
 
     std::string file_name_;
+
     double total_pot_ = 0.0;
     long total_triggers_ = 0;
+
     std::vector<SampleMetadata> samples_;
     std::unordered_map<std::string, std::size_t> sample_index_;
 };

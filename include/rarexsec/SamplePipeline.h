@@ -48,8 +48,10 @@ class SamplePipeline {
 
   private:
     SampleDescriptor descriptor_;
+
     ROOT::RDF::RNode nominal_node_;
     std::map<SampleVariation, ROOT::RDF::RNode> variation_nodes_;
+
     ROOT::RDF::RNode makeDataFrame(const std::string &base_dir, const VariableRegistry &var_reg,
                                    EventProcessorStage &processor, const std::string &rel_path,
                                    const nlohmann::json &all_samples_json);

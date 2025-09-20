@@ -22,6 +22,7 @@ class RunConfigRegistry {
 
   private:
     std::map<std::string, RunConfig> configs_;
+
     std::optional<std::string> base_directory_;
 };
 

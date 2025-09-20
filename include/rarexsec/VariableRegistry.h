@@ -550,6 +550,7 @@ class VariableRegistry {
     return v;
   }
     std::vector<std::string> common_columns_;
+
     std::map<SampleOrigin, std::vector<std::string>> origin_columns_;
 };
 

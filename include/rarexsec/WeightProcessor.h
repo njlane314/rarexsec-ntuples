@@ -19,6 +19,7 @@ class WeightProcessor : public EventProcessorStage {
   private:
     double sample_pot_;
     long sample_triggers_;
+
     double total_run_pot_;
     long total_run_triggers_;
 };
