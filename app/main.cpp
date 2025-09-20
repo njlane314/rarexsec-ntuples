@@ -116,8 +116,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    std::string resolved_beam;
+    std::vector<std::string> resolved_periods;
     try {
-        proc::SnapshotPipelineBuilder builder(registry, proc::VariableRegistry{}, options.beam, options.periods,
+        resolved_beam = rarexsec::cli::resolveBeam(registry, options.beam);
+        resolved_periods = rarexsec::cli::resolvePeriods(registry, resolved_beam, options.periods);
+    } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
+
+    try {
+        proc::SnapshotPipelineBuilder builder(registry, proc::VariableRegistry{}, resolved_beam, resolved_periods,
                                               *base_dir);
         if (options.output) {
             const std::string output_file = options.output->string();

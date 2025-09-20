@@ -24,7 +24,7 @@
       "run5": { "ext_triggers": 138338167, "samples": [] }
     },
 
-    "numi_fhc": {
+    "numi-fhc": {
       "active": true,
       "run1": { "pot": 3.922e+20, "samples": [] },
       "run2": { "pot": 1.766e+20, "samples": [] },
@@ -33,7 +33,7 @@
       "run5": { "pot": 2.461e+20, "samples": [] }
     },
 
-    "numi_rhc": {
+    "numi-rhc": {
       "active": true,
       "run1": { "pot": 6.268e+19, "samples": [] },
       "run2": { "pot": 2.971e+20, "samples": [] },
@@ -42,7 +42,7 @@
       "run5": { "pot": 4.645e+15, "samples": [] }
     },
 
-    "numi_ext": {
+    "numi-ext": {
       "active": true,
       "run1": { "ext_triggers": 40062895, "samples": [] },
       "run2": { "ext_triggers": 165820967, "samples": [] },

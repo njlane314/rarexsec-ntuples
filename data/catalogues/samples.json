@@ -2,7 +2,7 @@
     "samples": {
         "ntupledir": "/exp/uboone/data/users/nlane/ntuples",
         "beamlines": {
-            "numi_fhc": {
+            "numi-fhc": {
                 "run1": {
                     "nominal_pot": 3.922e+20,
                     "samples": [
@@ -41,7 +41,7 @@
                     ]
                 }
             },
-            "numi_ext": {
+            "numi-ext": {
                 "run1": {
                     "ext_triggers": 40062895,
                     "samples": [
