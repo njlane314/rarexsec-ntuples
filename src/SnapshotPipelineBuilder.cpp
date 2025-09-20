@@ -272,28 +272,28 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
     }
 
-    std::shared_ptr<TFile> output_handle;
-    std::unordered_map<std::string, TDirectory *> directory_lookup;
+    auto file_deleter = [](TFile *ptr) {
+        if (!ptr) {
+            return;
+        }
+        ptr->Write("", TObject::kOverwrite);
+        ptr->Close();
+        delete ptr;
+    };
+
     if (!directories_to_create.empty()) {
         ImplicitMTGuard imt_guard;
-        TFile *raw_file = TFile::Open(output_file.c_str(), "RECREATE");
-        if (!raw_file || raw_file->IsZombie()) {
+        std::unique_ptr<TFile, decltype(file_deleter)> output_handle(TFile::Open(output_file.c_str(), "RECREATE"),
+                                                                     file_deleter);
+        if (!output_handle || output_handle->IsZombie()) {
             log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
                        "with mode", "RECREATE");
         }
 
-        output_handle.reset(raw_file, [](TFile *ptr) {
-            if (!ptr) {
-                return;
-            }
-            ptr->Write("", TObject::kOverwrite);
-            ptr->Close();
-            delete ptr;
-        });
-
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Initialising", directories_to_create.size(),
                   "directory paths in", output_file);
 
+        std::unordered_map<std::string, TDirectory *> directory_lookup;
         directory_lookup.reserve(directories_to_create.size() * 4 + 1);
         directory_lookup.emplace("", output_handle.get());
 
@@ -362,16 +362,51 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
     }
 
-    auto relocateTreeToDirectory = [&](TDirectory *target_directory, const std::string &directory_path) {
+    auto relocateTreeToDirectory = [&](const std::vector<std::string> &directory_components) {
+        const std::string directory_path = componentsToPath(directory_components);
+        ImplicitMTGuard imt_guard;
+        std::unique_ptr<TFile, decltype(file_deleter)> file_handle(TFile::Open(output_file.c_str(), "UPDATE"),
+                                                                   file_deleter);
+        if (!file_handle || file_handle->IsZombie()) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen snapshot output", output_file,
+                       "with mode", "UPDATE");
+        }
+
+        TDirectory *current = file_handle.get();
+        std::string current_path;
+        for (const auto &component : directory_components) {
+            if (component.empty()) {
+                continue;
+            }
+
+            current->ReadKeys();
+            TDirectory *next = current->GetDirectory(component.c_str());
+            if (!next) {
+                if (TObject *existing = current->Get(component.c_str())) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot",
+                               "Existing object with requested name detected", existing->GetName(),
+                               "of type", existing->ClassName(), "under", current->GetPath());
+                }
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
+                          "under", current->GetPath());
+                next = current->mkdir(component.c_str());
+                if (!next) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component", component,
+                               "in", output_file);
+                }
+            }
+            current = next;
+
+            if (!current_path.empty()) {
+                current_path.push_back('/');
+            }
+            current_path += component;
+        }
+
+        TDirectory *target_directory = current;
         if (!target_directory) {
             log::fatal("SnapshotPipelineBuilder::snapshot", "Target directory pointer unexpectedly null for",
                        directory_path, "in", output_file);
-        }
-
-        TFile *file = target_directory->GetFile();
-        if (!file) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Target directory", directory_path,
-                       "is not associated with an output file for", output_file);
         }
 
         const std::string tree_name{kEventsTreeName};
@@ -384,9 +419,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             return;
         }
 
-        file->cd();
-        file->ReadKeys();
-        TKey *tree_key = file->GetKey(tree_name.c_str());
+        file_handle->cd();
+        file_handle->ReadKeys();
+        TKey *tree_key = file_handle->GetKey(tree_name.c_str());
         if (!tree_key) {
             log::fatal("SnapshotPipelineBuilder::snapshot", "Could not locate tree", tree_name,
                        "in root directory when relocating to", tree_path, "in", output_file);
@@ -413,23 +448,14 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                        "in", output_file);
         }
 
-        file->cd();
+        file_handle->cd();
         const std::string delete_pattern = std::string(tree_name) + ";*";
-        file->Delete(delete_pattern.c_str());
+        file_handle->Delete(delete_pattern.c_str());
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Relocated tree to", tree_path);
     };
 
-    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &directory_path) {
-        auto dir_it = directory_lookup.find(directory_path);
-        if (dir_it == directory_lookup.end()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Requested target directory", directory_path,
-                       "is not available in", output_file);
-        }
-
-        if (!output_handle) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Snapshot output file handle not initialised for",
-                       output_file);
-        }
+    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::vector<std::string> &directory_components) {
+        const std::string directory_path = componentsToPath(directory_components);
 
         if (!filter_expr.empty()) {
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to",
@@ -440,7 +466,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                   directory_path + '/' + kEventsTreeName, "to", output_file);
         auto tree_opts = opts;
         df.Snapshot(kEventsTreeName, output_file, *snapshot_columns, tree_opts);
-        relocateTreeToDirectory(dir_it->second, directory_path);
+        relocateTreeToDirectory(directory_components);
         wrote_anything = true;
         ++processed_trees;
         log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/', total_trees,
@@ -455,8 +481,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         const auto nominal_directory_components =
             nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
-        const auto nominal_directory_path = componentsToPath(nominal_directory_components);
-        snapshot_tree(sample.nominalNode(), nominal_directory_path);
+        snapshot_tree(sample.nominalNode(), nominal_directory_components);
         const auto &variation_nodes = sample.variationNodes();
         for (const auto &variation_def : sample.variationDescriptors()) {
             auto it = variation_nodes.find(variation_def.variation);
@@ -472,8 +497,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const auto variation_directory_components =
                 variationDirectoryComponents(key, variation_def, variation_beam, variation_period,
                                              sample.sampleOrigin(), variation_stage);
-            const auto variation_directory_path = componentsToPath(variation_directory_components);
-            snapshot_tree(it->second, variation_directory_path);
+            snapshot_tree(it->second, variation_directory_components);
         }
     }
 
@@ -482,13 +506,17 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         return;
     }
 
-    if (!output_handle) {
-        log::fatal("SnapshotPipelineBuilder::snapshot",
-                   "Snapshot output file handle unexpectedly unavailable for", output_file);
-    }
+    {
+        ImplicitMTGuard imt_guard;
+        std::unique_ptr<TFile, decltype(file_deleter)> metadata_handle(TFile::Open(output_file.c_str(), "UPDATE"),
+                                                                       file_deleter);
+        if (!metadata_handle || metadata_handle->IsZombie()) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen snapshot output", output_file,
+                       "with mode", "UPDATE");
+        }
 
-    this->writeSnapshotMetadata(*output_handle);
-    output_handle->Write("", TObject::kOverwrite);
+        this->writeSnapshotMetadata(*metadata_handle);
+    }
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
