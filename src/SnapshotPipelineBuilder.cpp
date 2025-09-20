@@ -22,6 +22,29 @@
 
 namespace {
 
+constexpr char kEventsTreeName[] = "events";
+
+class ImplicitMTGuard {
+  public:
+    ImplicitMTGuard() : was_enabled_{ROOT::IsImplicitMTEnabled()} {
+        if (was_enabled_) {
+            ROOT::DisableImplicitMT();
+        }
+    }
+
+    ImplicitMTGuard(const ImplicitMTGuard &) = delete;
+    ImplicitMTGuard &operator=(const ImplicitMTGuard &) = delete;
+
+    ~ImplicitMTGuard() {
+        if (was_enabled_) {
+            ROOT::EnableImplicitMT();
+        }
+    }
+
+  private:
+    bool was_enabled_;
+};
+
 std::string sanitiseComponent(std::string value) {
     std::string sanitised;
     sanitised.reserve(value.size());
@@ -186,7 +209,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Initialising", directories.size(),
                   "directory paths in", output_file);
-        std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "UPDATE")};
+        ImplicitMTGuard imt_guard;
+        std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "RECREATE")};
         if (!file || file->IsZombie()) {
             log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
                        "with mode", "UPDATE");
@@ -201,9 +225,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Ensuring directory path", directory_path);
             TDirectory *current = file.get();
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting at directory", current->GetPath());
-            const std::size_t last_index = components.size() - 1;
-            for (std::size_t idx = 0; idx < last_index; ++idx) {
-                const auto &component = components[idx];
+            for (const auto &component : components) {
                 if (component.empty()) {
                     continue;
                 }
@@ -289,17 +311,57 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
     }
 
-    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_path) {
+    const auto relocateTreeToDirectory = [&](const std::string &directory_path) {
+        if (directory_path.empty()) {
+            return;
+        }
+
+        ImplicitMTGuard imt_guard;
+        std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "UPDATE")};
+        if (!file || file->IsZombie()) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen snapshot output", output_file,
+                       "with mode", "UPDATE");
+        }
+
+        TDirectory *target_dir = file->GetDirectory(directory_path.c_str());
+        if (!target_dir) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Requested target directory", directory_path,
+                       "is not available in", output_file);
+        }
+
+        TObject *object = file->Get(kEventsTreeName);
+        auto *tree = dynamic_cast<TTree *>(object);
+        if (!tree) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Expected tree", kEventsTreeName,
+                       "not found in", output_file, "after snapshot");
+        }
+
+        target_dir->cd();
+        tree->SetDirectory(target_dir);
+        tree->Write("", TObject::kOverwrite);
+        file->cd();
+        file->Delete((std::string(kEventsTreeName) + ";*").c_str());
+        delete tree;
+        file->Write("", TObject::kOverwrite);
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Relocated tree",
+                  directory_path + '/' + kEventsTreeName, "into", output_file);
+    };
+
+    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &directory_path) {
         if (!filter_expr.empty()) {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to", tree_path);
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to",
+                      directory_path + '/' + kEventsTreeName);
             df = df.Filter(filter_expr);
         }
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Writing tree", tree_path, "to", output_file);
-        df.Snapshot(tree_path, output_file, columns, opts);
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Writing tree",
+                  directory_path + '/' + kEventsTreeName, "to", output_file);
+        auto tree_opts = opts;
+        df.Snapshot(kEventsTreeName, output_file, columns, tree_opts);
+        relocateTreeToDirectory(directory_path);
         wrote_anything = true;
         ++processed_trees;
         log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/', total_trees,
-                  "trees -", tree_path);
+                  "trees -", directory_path + '/' + kEventsTreeName);
     };
 
     for (auto const &[key, sample] : frames_) {
@@ -308,9 +370,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const std::string sample_period = rc ? rc->runPeriod() : std::string{};
         const std::string &sample_stage = sample.stageName();
 
-        const auto nominal_tree_path =
-            nominalTreePath(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
-        snapshot_tree(sample.nominalNode(), nominal_tree_path);
+        const auto nominal_directory_components =
+            nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
+        const auto nominal_directory_path = componentsToPath(nominal_directory_components);
+        snapshot_tree(sample.nominalNode(), nominal_directory_path);
         const auto &variation_nodes = sample.variationNodes();
         for (const auto &variation_def : sample.variationDescriptors()) {
             auto it = variation_nodes.find(variation_def.variation);
@@ -323,9 +386,11 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const std::string &variation_stage =
                 variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
 
-            const auto variation_tree_path = variationTreePath(key, variation_def, variation_beam, variation_period,
-                                                               sample.sampleOrigin(), variation_stage);
-            snapshot_tree(it->second, variation_tree_path);
+            const auto variation_directory_components =
+                variationDirectoryComponents(key, variation_def, variation_beam, variation_period,
+                                             sample.sampleOrigin(), variation_stage);
+            const auto variation_directory_path = componentsToPath(variation_directory_components);
+            snapshot_tree(it->second, variation_directory_path);
         }
     }
 
