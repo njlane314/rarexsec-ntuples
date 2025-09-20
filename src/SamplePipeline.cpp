@@ -35,6 +35,11 @@ void reportMissingColumns(const SampleKey &sample_key, const std::string &rel_pa
         return;
     }
 
+    constexpr bool kReportOptionalMissingColumns = false;
+    if (requirement == ColumnRequirement::kOptional && !kReportOptionalMissingColumns) {
+        return;
+    }
+
     std::vector<std::string> sorted_missing{missing_columns.begin(), missing_columns.end()};
     std::sort(sorted_missing.begin(), sorted_missing.end());
 
