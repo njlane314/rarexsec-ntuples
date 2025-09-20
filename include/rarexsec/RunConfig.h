@@ -27,8 +27,10 @@ class RunConfig {
   private:
     std::string beam_mode_;
     std::string run_period_;
+
     double nominal_pot_;
     long nominal_triggers_;
+
     json samples_;
 };
 

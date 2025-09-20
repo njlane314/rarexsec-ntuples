@@ -43,8 +43,8 @@ class SnapshotPipelineBuilder {
   private:
     const RunConfigRegistry &run_registry_;
     VariableRegistry var_registry_;
-    std::string ntuple_base_directory_;
 
+    std::string ntuple_base_directory_;
     std::string beam_;
     std::vector<std::string> periods_;
     bool blind_;

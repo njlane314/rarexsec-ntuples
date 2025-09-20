@@ -15,9 +15,11 @@ namespace proc {
 struct VariationDescriptor {
     SampleKey sample_key;
     SampleVariation variation{SampleVariation::kUnknown};
+
     std::string variation_label;
     std::string relative_path;
     std::string stage_name;
+
     double pot{0.0};
     long triggers{0};
 };
@@ -25,12 +27,15 @@ struct VariationDescriptor {
 struct SampleDescriptor {
     SampleKey sample_key;
     SampleOrigin origin{SampleOrigin::kUnknown};
+
     std::string relative_path;
     std::string stage_name;
     std::string truth_filter;
     std::vector<std::string> truth_exclusions;
+
     double pot{0.0};
     long triggers{0};
+
     std::vector<VariationDescriptor> variations;
 
     static SampleDescriptor fromJson(const nlohmann::json &sample_json);

@@ -13,11 +13,13 @@ namespace proc {
 struct SampleDataset {
     SampleOrigin origin_;
     AnalysisRole role_;
+
     mutable ROOT::RDF::RNode dataframe_;
 };
 
 struct SampleDatasetGroup {
     SampleDataset nominal_;
+
     std::unordered_map<SampleVariation, SampleDataset> variations_;
 };
 
