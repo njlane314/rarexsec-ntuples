@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include <rarexsec/LoggingUtilities.h>
+#include <rarexsec/LoggerUtils.h>
 #include <rarexsec/SnapshotPipelineBuilder.h>
 #include <rarexsec/RunConfigLoader.h>
 
