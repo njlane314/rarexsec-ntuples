@@ -76,6 +76,8 @@ relative file paths.
   `RDataFrame::Filter` syntax.
 - Supply an output file to snapshot the selected events. When omitted the tool
   prints the available branches for each configured sample.
+- Snapshots include only the curated branch list defined in
+  `requestedSnapshotColumns()` within `app/main.cpp`.
 
 ### Training pool tool
 
