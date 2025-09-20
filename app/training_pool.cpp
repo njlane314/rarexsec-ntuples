@@ -49,8 +49,7 @@ const std::vector<std::string> &requestedTrainingPoolColumns() {
         "event_semantic_counts_w",
         "is_vtx_in_image_u",
         "is_vtx_in_image_v",
-        "is_vtx_in_image_w",
-        "inference_score"};
+        "is_vtx_in_image_w"};
 
     return columns;
 }
