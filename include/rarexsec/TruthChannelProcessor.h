@@ -10,7 +10,7 @@ class TruthChannelProcessor : public EventProcessorStage {
     ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
 
   private:
-    ROOT::RDF::RNode processNonMc(ROOT::RDF::RNode df, SampleOrigin st) const;
+    ROOT::RDF::RNode processData(ROOT::RDF::RNode df, SampleOrigin st) const;
     ROOT::RDF::RNode defineCounts(ROOT::RDF::RNode df) const;
     ROOT::RDF::RNode assignInclusiveChannels(ROOT::RDF::RNode df) const;
     ROOT::RDF::RNode assignExclusiveChannels(ROOT::RDF::RNode df) const;
