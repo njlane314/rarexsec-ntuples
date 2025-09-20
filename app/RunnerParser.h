@@ -37,7 +37,7 @@ inline std::vector<std::string> parsePeriods(std::string_view csv) {
 }
 
 inline CommandLineOptions parseArguments(int argc, char **argv) {
-    const std::string program = argc > 0 ? argv[0] : "rarexsec-runner";
+    const std::string program = argc > 0 ? argv[0] : "snapshot";
     const std::string usage = "Usage: " + program +
                               " <config.json> <beam> <periods> [selection] [output.root]";
 

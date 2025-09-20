@@ -84,7 +84,7 @@ std::vector<std::string> filterAvailableColumns(const proc::SnapshotPipelineBuil
         if (present_everywhere) {
             available.push_back(column);
         } else {
-            proc::log::info("rarexsec-training-pool", "[warning]", "Omitting column", column,
+            proc::log::info("training-pool", "[warning]", "Omitting column", column,
                             "because it is not available for every dataset");
         }
     }
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
                                                    : proc::nuMuCCSelection();
 
         builder.snapshot(selection, output_file, columns);
-        proc::log::info("rarexsec-training-pool", "Training pool snapshot written to", output_file);
+        proc::log::info("training-pool", "Training pool snapshot written to", output_file);
         std::cout << "Training pool generated at: " << output_file << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Processing failed: " << e.what() << std::endl;
