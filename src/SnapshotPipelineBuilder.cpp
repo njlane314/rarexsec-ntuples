@@ -154,6 +154,23 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     bool first = true;
     ROOT::RDF::RSnapshotOptions opts;
 
+    std::size_t total_trees = 0;
+    for (const auto &[key, sample] : frames_) {
+        (void)key;
+        ++total_trees;
+        const auto &variation_nodes = sample.variationNodes();
+        for (const auto &variation_def : sample.variationDescriptors()) {
+            if (variation_nodes.count(variation_def.variation)) {
+                ++total_trees;
+            }
+        }
+    }
+
+    std::size_t processed_trees = 0;
+    if (total_trees > 0) {
+        log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
+    }
+
     auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_name) {
         if (!filter_expr.empty()) {
             df = df.Filter(filter_expr);
@@ -161,6 +178,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         opts.fMode = first ? "RECREATE" : "UPDATE";
         df.Snapshot(tree_name, output_file, columns, opts);
         first = false;
+        ++processed_trees;
+        log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/', total_trees,
+                  "trees -", tree_name);
     };
 
     for (auto const &[key, sample] : frames_) {
