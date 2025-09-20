@@ -82,7 +82,7 @@ std::vector<std::string> filterAvailableColumns(const proc::SnapshotPipelineBuil
         if (present_everywhere) {
             available.push_back(column);
         } else {
-            proc::log::info("snapshot", "[warning]", "Omitting column", column,
+            proc::log::info("snapshot-analysis", "[warning]", "Omitting column", column,
                             "because it is not available for every dataset");
         }
     }
@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
             }
 
             builder.snapshot(options.selection.value_or(""), output_file, columns);
-            proc::log::info("main", "Snapshot written to", output_file);
+            proc::log::info("snapshot-analysis", "Snapshot written to", output_file);
             std::cout << "ROOT snapshot saved to: " << output_file << std::endl;
         } else {
             builder.printAllBranches();
