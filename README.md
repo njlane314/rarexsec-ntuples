@@ -81,6 +81,9 @@ relative file paths.
   `RDataFrame::Filter` syntax.
 - Supply an output file to snapshot the selected events. When omitted the tool
   prints the available branches for each configured sample.
+- Include details such as the beam, period, and selection in the output file
+  name to keep it self-descriptive; for example,
+  `snapshot_fhc_r1-3_nuepre.root`.
 - Snapshots include only the curated branch list defined in
   `requestedSnapshotColumns()` within `app/snapshot_analysis.cpp`.
 
