@@ -21,9 +21,9 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
            const ROOT::RVec<int> &plane_hits_v, const ROOT::RVec<int> &plane_hits_y) {
             ROOT::RVec<bool> mask(scores.size(), false);
             for (std::size_t i = 0; i < scores.size(); ++i) {
-                mask[i] = ::proc::isMuonCandidate(scores[i], llr[i], lengths[i], dists[i], gens[i], start_x[i],
-                                                  start_y[i], start_z[i], end_x[i], end_y[i], end_z[i],
-                                                  plane_hits_u[i], plane_hits_v[i], plane_hits_y[i]);
+                mask[i] = isMuonCandidate(scores[i], llr[i], lengths[i], dists[i], gens[i], start_x[i], start_y[i],
+                                          start_z[i], end_x[i], end_y[i], end_z[i], plane_hits_u[i], plane_hits_v[i],
+                                          plane_hits_y[i]);
             }
             return mask;
         },
@@ -33,21 +33,21 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
 }
 
 ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df) const {
-    auto mu_df = df.Define("muon_trk_score_v", ::proc::filterByMask<float>, {"track_shower_scores", "muon_mask"})
-                     .Define("muon_trk_llr_pid_v", ::proc::filterByMask<float>, {"trk_llr_pid_v", "muon_mask"})
-                     .Define("muon_trk_start_x_v", ::proc::filterByMask<float>, {"track_start_x", "muon_mask"})
-                     .Define("muon_trk_start_y_v", ::proc::filterByMask<float>, {"track_start_y", "muon_mask"})
-                     .Define("muon_trk_start_z_v", ::proc::filterByMask<float>, {"track_start_z", "muon_mask"})
-                     .Define("muon_trk_end_x_v", ::proc::filterByMask<float>, {"track_end_x", "muon_mask"})
-                     .Define("muon_trk_end_y_v", ::proc::filterByMask<float>, {"track_end_y", "muon_mask"})
-                     .Define("muon_trk_end_z_v", ::proc::filterByMask<float>, {"track_end_z", "muon_mask"})
-                     .Define("muon_trk_length_v", ::proc::filterByMask<float>, {"track_length", "muon_mask"})
-                     .Define("muon_trk_distance_v", ::proc::filterByMask<float>, {"track_distance_to_vertex", "muon_mask"})
-                     .Define("muon_pfp_generation_v", ::proc::filterByMask<unsigned>, {"pfp_generations", "muon_mask"})
+    auto mu_df = df.Define("muon_trk_score_v", filterByMask<float>, {"track_shower_scores", "muon_mask"})
+                     .Define("muon_trk_llr_pid_v", filterByMask<float>, {"trk_llr_pid_v", "muon_mask"})
+                     .Define("muon_trk_start_x_v", filterByMask<float>, {"track_start_x", "muon_mask"})
+                     .Define("muon_trk_start_y_v", filterByMask<float>, {"track_start_y", "muon_mask"})
+                     .Define("muon_trk_start_z_v", filterByMask<float>, {"track_start_z", "muon_mask"})
+                     .Define("muon_trk_end_x_v", filterByMask<float>, {"track_end_x", "muon_mask"})
+                     .Define("muon_trk_end_y_v", filterByMask<float>, {"track_end_y", "muon_mask"})
+                     .Define("muon_trk_end_z_v", filterByMask<float>, {"track_end_z", "muon_mask"})
+                     .Define("muon_trk_length_v", filterByMask<float>, {"track_length", "muon_mask"})
+                     .Define("muon_trk_distance_v", filterByMask<float>, {"track_distance_to_vertex", "muon_mask"})
+                     .Define("muon_pfp_generation_v", filterByMask<unsigned>, {"pfp_generations", "muon_mask"})
                      .Define(
                          "muon_track_costheta",
                          [](const ROOT::RVec<float> &theta, const ROOT::RVec<bool> &mask) {
-                             return ::proc::transformByMask(theta, mask, [](float angle) { return std::cos(angle); });
+                             return transformByMask(theta, mask, [](float angle) { return std::cos(angle); });
                          },
                          {"track_theta", "muon_mask"})
                      .Define("n_muons_tot", "ROOT::VecOps::Sum(muon_mask)")
