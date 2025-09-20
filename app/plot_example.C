@@ -4,7 +4,6 @@
 #include "EventReader.h"
 
 #include "TCanvas.h"
-#include "TColor.h"
 #include "TError.h"
 #include "TLatex.h"
 #include "TString.h"
