@@ -6,12 +6,6 @@
 namespace proc {
 
 ROOT::RDF::RNode MuonSelectionProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
-    auto proc_df = df;
-    if (!df.HasColumn("track_shower_scores")) {
-        proc_df = df.Define("n_muons_tot", []() { return 0UL; }).Define("has_muon", []() { return false; });
-        return next_ ? next_->process(proc_df, st) : proc_df;
-    }
-
     auto muon_mask_df = buildMuonMask(df);
     auto muon_features_df = extractMuonFeatures(muon_mask_df);
     return next_ ? next_->process(muon_features_df, st) : muon_features_df;
