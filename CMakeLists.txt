@@ -57,8 +57,8 @@ if(RAREXSEC_BUILD_APPS)
     add_subdirectory(app)
 endif()
 
-if(BUILD_TESTING)
-    # No top-level tests are defined yet.
+if(BUILD_TESTING AND RAREXSEC_BUILD_APPS)
+    add_subdirectory(tests)
 endif()
 
 if(RAREXSEC_BUILD_LIB OR RAREXSEC_BUILD_APPS)

@@ -9,6 +9,7 @@
 
 #include <cctype>
 #include <sstream>
+#include <unordered_set>
 
 #include <rarexsec/BlipProcessor.h>
 #include <rarexsec/LoggerUtils.h>
@@ -185,10 +186,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Initialising", directories.size(),
                   "directory paths in", output_file);
-        std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "RECREATE")};
+        std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "UPDATE")};
         if (!file || file->IsZombie()) {
             log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
-                       "with mode", "RECREATE");
+                       "with mode", "UPDATE");
         }
 
         for (const auto &components : directories) {
@@ -212,18 +213,20 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                 TDirectory *next = current->GetDirectory(component.c_str());
                 if (!next) {
                     if (TObject *existing = current->Get(component.c_str())) {
-                        log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
-                                  "Existing object with requested name detected", existing->GetName(), "of type",
-                                  existing->ClassName(), "under", current->GetPath());
-                    } else {
-                        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
-                                  "under", current->GetPath());
+                        log::fatal("SnapshotPipelineBuilder::snapshot",
+                                   "Existing object with requested name detected", existing->GetName(), "of type",
+                                   existing->ClassName(), "under", current->GetPath());
                     }
+                    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
+                              "under", current->GetPath());
                     next = current->mkdir(component.c_str());
-                }
-                if (!next) {
-                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component", component,
-                               "in", output_file);
+                    if (!next) {
+                        log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component",
+                                   component, "in", output_file);
+                    }
+                } else {
+                    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Reusing existing directory",
+                              component, "under", current->GetPath());
                 }
                 current = next;
                 log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Now at directory", current->GetPath());
@@ -235,6 +238,18 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
     std::vector<std::vector<std::string>> directories_to_create;
     directories_to_create.reserve(frames_.size());
+    std::unordered_set<std::string> scheduled_directories;
+    scheduled_directories.reserve(frames_.size());
+
+    auto schedule_directory = [&](std::vector<std::string> components, std::string description) {
+        const std::string directory_path = componentsToPath(components);
+        if (scheduled_directories.insert(directory_path).second) {
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", std::move(description), directory_path);
+            directories_to_create.push_back(std::move(components));
+        } else {
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Skipping duplicate directory", directory_path);
+        }
+    };
 
     std::size_t total_trees = 0;
     for (const auto &[key, sample] : frames_) {
@@ -243,10 +258,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const std::string sample_period = rc ? rc->runPeriod() : std::string{};
         const std::string &sample_stage = sample.stageName();
 
-        directories_to_create.push_back(
-            nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage));
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduled nominal directory",
-                  componentsToPath(directories_to_create.back()));
+        schedule_directory(nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(),
+                                                      sample_stage),
+                           "Scheduled nominal directory");
         ++total_trees;
 
         const auto &variation_nodes = sample.variationNodes();
@@ -261,11 +275,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const std::string &variation_stage =
                 variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
 
-            directories_to_create.push_back(variationDirectoryComponents(key, variation_def, variation_beam,
-                                                                        variation_period, sample.sampleOrigin(),
-                                                                        variation_stage));
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduled variation directory",
-                      componentsToPath(directories_to_create.back()));
+            schedule_directory(variationDirectoryComponents(key, variation_def, variation_beam, variation_period,
+                                                            sample.sampleOrigin(), variation_stage),
+                               "Scheduled variation directory");
             ++total_trees;
         }
     }
