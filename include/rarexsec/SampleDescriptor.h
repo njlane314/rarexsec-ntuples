@@ -70,6 +70,6 @@ inline SampleDescriptor SampleDescriptor::fromJson(const nlohmann::json &sample_
     return descriptor;
 }
 
-} // namespace proc
+}
 
 #endif

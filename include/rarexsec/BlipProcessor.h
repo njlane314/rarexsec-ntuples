@@ -10,6 +10,6 @@ class BlipProcessor : public EventProcessorStage {
     ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
 };
 
-} // namespace proc
+}
 
 #endif

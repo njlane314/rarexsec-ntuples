@@ -58,7 +58,7 @@ ROOT::RVec<float> missingVertexDistances(const ROOT::RVec<float> &bx) {
     return ROOT::RVec<float>(bx.size(), -1.f);
 }
 
-} // namespace
+}
 
 namespace proc {
 

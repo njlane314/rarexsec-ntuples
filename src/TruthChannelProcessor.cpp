@@ -31,7 +31,7 @@ int channelDefinitionForNonMcSample(SampleOrigin origin) {
     }
 }
 
-} // namespace
+}
 
 ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     if (st != SampleOrigin::kMonteCarlo) {

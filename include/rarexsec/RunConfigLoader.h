@@ -15,6 +15,6 @@ class RunConfigLoader {
     static void loadFromFile(const std::string &config_path, RunConfigRegistry &registry);
 };
 
-} // namespace proc
+}
 
 #endif // RUN_CONFIG_LOADER_H

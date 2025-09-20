@@ -23,6 +23,6 @@ class WeightProcessor : public EventProcessorStage {
     long total_run_triggers_;
 };
 
-} // namespace proc
+}
 
 #endif

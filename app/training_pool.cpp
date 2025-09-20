@@ -92,7 +92,7 @@ std::vector<std::string> filterAvailableColumns(const proc::SnapshotPipelineBuil
     return available;
 }
 
-} // namespace
+}
 
 int main(int argc, char **argv) {
     rarexsec::cli::CommandLineOptions options;

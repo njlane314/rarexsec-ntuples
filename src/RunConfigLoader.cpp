@@ -52,4 +52,4 @@ void RunConfigLoader::loadFromFile(const std::string &config_path, RunConfigRegi
     }
 }
 
-} // namespace proc
+}
