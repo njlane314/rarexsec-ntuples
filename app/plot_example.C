@@ -35,8 +35,8 @@ void plot_example(const char *file_name = "analysis_snapshot.root", const char *
         if (!reader.samples().empty()) {
             std::cout << "\nSamples in the file:" << '\n';
             for (const SampleMetadata &metadata : reader.samples()) {
-                std::cout << "  - " << metadata.tree_name << " (beam=" << metadata.beam << ", period="
-                          << metadata.run_period << ", dataset=" << metadata.dataset_id << ")" << '\n';
+                std::cout << "  - " << metadata.tree_name << " (beam=" << metadata.beam
+                          << ", period=" << metadata.run_period << ")" << '\n';
                 std::cout << "      stage=" << metadata.stage << ", variation=" << metadata.variation
                           << ", origin=" << metadata.origin << '\n';
                 std::cout << "      relative_path=" << metadata.relative_path << '\n';

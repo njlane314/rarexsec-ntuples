@@ -8,7 +8,6 @@ import sys
 import sqlite3
 from functools import lru_cache
 from pathlib import Path
-from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 import re
 import subprocess
@@ -16,22 +15,14 @@ import shutil
 import uproot
 from typing import Set, Tuple, List, Dict
 
-SCHEMA_VERSION = "1.0"
 DEFAULT_RUN_DB = "/exp/uboone/data/uboonebeam/beamdb/run.db"
 
-HADD_TMPDIR = Path("/pnfs/uboone/scratch/users/nlane/tmp/") 
-MIN_FREE_GB = 5.0                                        
-DEFAULT_JOBS = min(8, os.cpu_count() or 1)               
+HADD_TMPDIR = Path("/pnfs/uboone/scratch/users/nlane/tmp/")
+MIN_FREE_GB = 5.0
+DEFAULT_JOBS = min(8, os.cpu_count() or 1)
 CATALOGUE_SUBDIR = "catalogues"
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
-
-TOKEN_MAP_STAGE = {
-    "selection_beam": "sel-beam",
-    "selection_ext": "sel-ext",
-    "selection_strangeness": "sel-strange",
-    "selection_dirt": "sel-dirt",
-}
 
 def norm_run(run: str) -> str:
     digits = "".join(ch for ch in run if ch.isdigit())
@@ -42,23 +33,6 @@ def split_beam_key(beam_key: str) -> tuple[str, str]:
         b, m = beam_key.split("_", 1)
         return b, m
     return beam_key, "data"
-
-def infer_subset(sample_key: str, sample_type: str) -> str:
-    key = (sample_key or "").lower()
-    if "strange" in key:
-        return "strange"
-    if "dirt" in key or sample_type == "dirt":
-        return "dirt"
-    return "inc"
-
-def dataset_id(beamline: str, mode: str, run: str, origin: str, subset: str, stage_name: str, detvar: str | None = None) -> str:
-    parts = [beamline, mode, norm_run(run), origin, subset, TOKEN_MAP_STAGE.get(stage_name, stage_name)]
-    if detvar:
-        parts.append(detvar)
-    return ".".join(parts)
-
-def version_tag() -> str:
-    return datetime.now(timezone.utc).strftime("v%Y%m%d")
 
 def runset_token(runs: list[str]) -> str:
     if not runs:
@@ -410,8 +384,6 @@ def main() -> None:
     if cfg.get("recipe_kind", "instance") == "template":
         sys.exit("Refusing to run on a template. Copy it and set recipe_kind='instance'.")
 
-    produced_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-
     xml_paths = default_xmls()
     _entities, stage_outdirs = load_xml_context(xml_paths)
 
@@ -449,10 +421,6 @@ def main() -> None:
 
             for sample in samples_in:
                 s = dict(sample)
-                origin = s.get("sample_type", "unknown")
-                subset = infer_subset(s.get("sample_key", ""), origin)
-                stage_name = s.get("stage_name", "selection_beam")
-                s["dataset_id"] = dataset_id(beamline, mode, run, origin, subset, stage_name, None)
 
                 ok = process_sample_entry(
                     s,
@@ -469,8 +437,6 @@ def main() -> None:
                     new_vars = []
                     for dv in s["detector_variations"]:
                         dv2 = dict(dv)
-                        detvar = dv2.get("variation_type")
-                        dv2["dataset_id"] = dataset_id(beamline, mode, run, origin, subset, stage_name, detvar)
                         process_sample_entry(
                             dv2,
                             ntuple_dir,
@@ -494,10 +460,6 @@ def main() -> None:
     out_path = outdir / "samples.json"
 
     catalogue = {
-        "role": "catalogue",
-        "schema_version": SCHEMA_VERSION,
-        "produced_at": produced_at,
-        "source_recipe_path": str(recipe_path),
         "samples": {
             "ntupledir": cfg["ntuple_base_directory"],
             "beamlines": beamlines_out,

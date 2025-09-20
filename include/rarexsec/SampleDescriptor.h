@@ -16,7 +16,6 @@ struct VariationDescriptor {
     SampleKey sample_key;
     SampleVariation variation{SampleVariation::kUnknown};
     std::string variation_label;
-    std::string dataset_id;
     std::string relative_path;
     std::string stage_name;
     double pot{0.0};
@@ -26,7 +25,6 @@ struct VariationDescriptor {
 struct SampleDescriptor {
     SampleKey sample_key;
     SampleOrigin origin{SampleOrigin::kUnknown};
-    std::string dataset_id;
     std::string relative_path;
     std::string stage_name;
     std::string truth_filter;
@@ -46,7 +44,6 @@ inline SampleDescriptor SampleDescriptor::fromJson(const nlohmann::json &sample_
         descriptor.origin = originFromString(sample_json.at("sample_type").get<std::string>());
     }
 
-    descriptor.dataset_id = sample_json.value("dataset_id", std::string{});
     descriptor.relative_path = sample_json.value("relative_path", std::string{});
     descriptor.stage_name = sample_json.value("stage_name", std::string{});
     descriptor.truth_filter = sample_json.value("truth_filter", std::string{});
@@ -62,7 +59,6 @@ inline SampleDescriptor SampleDescriptor::fromJson(const nlohmann::json &sample_
             variation.sample_key = SampleKey{dv.at("sample_key").get<std::string>()};
             variation.variation_label = dv.value("variation_type", std::string{});
             variation.variation = variationFromString(variation.variation_label);
-            variation.dataset_id = dv.value("dataset_id", std::string{});
             variation.relative_path = dv.value("relative_path", std::string{});
             variation.stage_name = dv.value("stage_name", std::string{});
             variation.pot = dv.value("pot", 0.0);
