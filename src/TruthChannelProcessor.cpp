@@ -6,28 +6,21 @@
 namespace proc {
 namespace {
 
-int channelForNonMcSample(SampleOrigin origin) {
-    switch (origin) {
-    case SampleOrigin::kData:
-        return 0;
-    case SampleOrigin::kExternal:
-        return 1;
-    case SampleOrigin::kDirt:
-        return 2;
-    default:
-        return 99;
-    }
-}
+struct DataSampleChannelInfo {
+    int channel;
+    int definition;
+};
 
-int channelDefinitionForNonMcSample(SampleOrigin origin) {
+DataSampleChannelInfo channelInfoForDataSample(SampleOrigin origin) {
     switch (origin) {
     case SampleOrigin::kData:
-        return 0;
+        return {0, 0};
     case SampleOrigin::kExternal:
+        return {1, 1};
     case SampleOrigin::kDirt:
-        return 1;
+        return {2, 1};
     default:
-        return 99;
+        return {99, 99};
     }
 }
 
@@ -35,7 +28,7 @@ int channelDefinitionForNonMcSample(SampleOrigin origin) {
 
 ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     if (st != SampleOrigin::kMonteCarlo) {
-        return processNonMc(df, st);
+        return processData(df, st);
     }
 
     auto counts_df = defineCounts(df);
@@ -45,9 +38,8 @@ ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigi
     return next_ ? next_->process(chan_df, st) : chan_df;
 }
 
-ROOT::RDF::RNode TruthChannelProcessor::processNonMc(ROOT::RDF::RNode df, SampleOrigin st) const {
-    const auto channel = channelForNonMcSample(st);
-    const auto channel_def = channelDefinitionForNonMcSample(st);
+ROOT::RDF::RNode TruthChannelProcessor::processData(ROOT::RDF::RNode df, SampleOrigin st) const {
+    const auto [channel, channel_def] = channelInfoForDataSample(st);
 
     auto mode_df = df.Define("genie_int_mode", []() { return -1; });
 
