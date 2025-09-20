@@ -4,6 +4,7 @@
 #include "TFile.h"
 #include "TROOT.h"
 #include "TTree.h"
+#include "TObject.h"
 #include "ROOT/RDataFrame.hxx"
 
 #include <cctype>
@@ -155,11 +156,35 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     ROOT::RDF::RSnapshotOptions opts;
     opts.fMode = "UPDATE";
 
+    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting snapshot over", frames_.size(),
+              "samples to", output_file);
+    if (filter_expr.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No filter expression supplied");
+    } else {
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Filter expression:", filter_expr);
+    }
+    if (columns.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No explicit column list provided");
+    } else {
+        std::ostringstream column_stream;
+        for (std::size_t i = 0; i < columns.size(); ++i) {
+            if (i != 0) {
+                column_stream << ", ";
+            }
+            column_stream << columns[i];
+        }
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Requested columns:", column_stream.str());
+    }
+
     const auto initialiseOutputDirectories = [&](const std::vector<std::vector<std::string>> &directories) {
         if (directories.empty()) {
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
+                      "No directories requested during initialisation for", output_file);
             return;
         }
 
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Initialising", directories.size(),
+                  "directory paths in", output_file);
         std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "RECREATE")};
         if (!file || file->IsZombie()) {
             log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
@@ -167,14 +192,27 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
 
         for (const auto &components : directories) {
+            const std::string directory_path = componentsToPath(components);
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Ensuring directory path", directory_path);
             TDirectory *current = file.get();
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting at directory", current->GetPath());
             for (const auto &component : components) {
                 if (component.empty()) {
                     continue;
                 }
 
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Processing component", component,
+                          "under", current->GetPath());
                 TDirectory *next = current->GetDirectory(component.c_str());
                 if (!next) {
+                    if (TObject *existing = current->Get(component.c_str())) {
+                        log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
+                                  "Existing object with requested name detected", existing->GetName(), "of type",
+                                  existing->ClassName(), "under", current->GetPath());
+                    } else {
+                        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
+                                  "under", current->GetPath());
+                    }
                     next = current->mkdir(component.c_str());
                 }
                 if (!next) {
@@ -182,6 +220,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                                "in", output_file);
                 }
                 current = next;
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Now at directory", current->GetPath());
             }
         }
 
@@ -200,6 +239,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         directories_to_create.push_back(
             nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage));
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduled nominal directory",
+                  componentsToPath(directories_to_create.back()));
         ++total_trees;
 
         const auto &variation_nodes = sample.variationNodes();
@@ -215,8 +256,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                 variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
 
             directories_to_create.push_back(variationDirectoryComponents(key, variation_def, variation_beam,
-                                                                         variation_period, sample.sampleOrigin(),
-                                                                         variation_stage));
+                                                                        variation_period, sample.sampleOrigin(),
+                                                                        variation_stage));
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduled variation directory",
+                      componentsToPath(directories_to_create.back()));
             ++total_trees;
         }
     }
@@ -230,8 +273,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
     auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_path) {
         if (!filter_expr.empty()) {
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to", tree_path);
             df = df.Filter(filter_expr);
         }
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Writing tree", tree_path, "to", output_file);
         df.Snapshot(tree_path, output_file, columns, opts);
         wrote_anything = true;
         ++processed_trees;
