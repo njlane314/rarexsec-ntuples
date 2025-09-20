@@ -84,7 +84,9 @@ inline ROOT::RDF::RNode ensureSoftwareTrigger(ROOT::RDF::RNode df, SampleOrigin 
         return df.Define(
             "software_trigger",
             [](unsigned run, int pre_count, int post_count) { return run < 16880 ? pre_count > 0 : post_count > 0; },
-            {"run", pre, post});
+            {"run",
+             pre,
+             post});
     };
 
     if (origin == SampleOrigin::kMonteCarlo) {

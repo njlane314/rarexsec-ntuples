@@ -67,7 +67,11 @@ ROOT::RDF::RNode BlipProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) co
 
     if (proc_df.HasColumn("neutrino_vertex_x")) {
         proc_df = proc_df.Define("blip_distance_to_vertex", computeDistancesToVertex,
-                                 {"blip_x", "blip_y", "blip_z", "neutrino_vertex_x", "neutrino_vertex_y",
+                                 {"blip_x",
+                                  "blip_y",
+                                  "blip_z",
+                                  "neutrino_vertex_x",
+                                  "neutrino_vertex_y",
                                   "neutrino_vertex_z"});
     } else {
         proc_df = proc_df.Define("blip_distance_to_vertex", missingVertexDistances, {"blip_x"});

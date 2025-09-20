@@ -66,7 +66,9 @@ ROOT::RDF::RNode TruthChannelProcessor::defineCounts(ROOT::RDF::RNode df) const 
     auto fid_df = df.Define(
         "in_fiducial",
         [](float x, float y, float z) { return isInFiducialVolume(x, y, z); },
-        {"neutrino_vertex_x", "neutrino_vertex_y", "neutrino_vertex_z"});
+        {"neutrino_vertex_x",
+         "neutrino_vertex_y",
+         "neutrino_vertex_z"});
 
     auto strange_df = fid_df.Define(
         "mc_n_strange",
@@ -132,7 +134,12 @@ ROOT::RDF::RNode TruthChannelProcessor::assignInclusiveChannels(ROOT::RDF::RNode
             }
             return 99;
         },
-        {"in_fiducial", "neutrino_pdg", "interaction_ccnc", "mc_n_strange", "mc_n_proton", "mc_n_pion"});
+        {"in_fiducial",
+         "neutrino_pdg",
+         "interaction_ccnc",
+         "mc_n_strange",
+         "mc_n_proton",
+         "mc_n_pion"});
 
     auto incl_alias_df = incl_chan_df.Define("inclusive_strange_channels", "incl_channel");
 
@@ -193,8 +200,17 @@ ROOT::RDF::RNode TruthChannelProcessor::assignExclusiveChannels(ROOT::RDF::RNode
             }
             return 99;
         },
-        {"in_fiducial", "neutrino_pdg", "interaction_ccnc", "mc_n_strange", "count_kaon_plus", "count_kaon_minus",
-         "count_kaon_zero", "count_lambda", "count_sigma_plus", "count_sigma_zero", "count_sigma_minus"});
+        {"in_fiducial",
+         "neutrino_pdg",
+         "interaction_ccnc",
+         "mc_n_strange",
+         "count_kaon_plus",
+         "count_kaon_minus",
+         "count_kaon_zero",
+         "count_lambda",
+         "count_sigma_plus",
+         "count_sigma_zero",
+         "count_sigma_minus"});
 
     auto excl_alias_df = excl_chan_df.Define("exclusive_strange_channels", "excl_channel");
 
@@ -240,8 +256,14 @@ ROOT::RDF::RNode TruthChannelProcessor::assignChannelDefinitions(ROOT::RDF::RNod
             }
             return 99;
         },
-        {"in_fiducial", "neutrino_pdg", "interaction_ccnc", "mc_n_strange", "mc_n_pion", "mc_n_proton",
-         "count_pi_zero", "count_gamma"});
+        {"in_fiducial",
+         "neutrino_pdg",
+         "interaction_ccnc",
+         "mc_n_strange",
+         "mc_n_pion",
+         "mc_n_proton",
+         "count_pi_zero",
+         "count_gamma"});
 
     auto alias_df = chan_df.Define("channel_definitions", "channel_def");
 
@@ -253,7 +275,9 @@ ROOT::RDF::RNode TruthChannelProcessor::assignChannelDefinitions(ROOT::RDF::RNod
         [](bool is_sig, float purity, float completeness) {
             return is_sig && purity > 0.5f && completeness > 0.1f;
         },
-        {"is_truth_signal", "neutrino_purity_from_pfp", "neutrino_completeness_from_pfp"});
+        {"is_truth_signal",
+         "neutrino_purity_from_pfp",
+         "neutrino_completeness_from_pfp"});
 
     return pure_sig_df;
 }
