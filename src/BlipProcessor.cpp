@@ -63,7 +63,6 @@ ROOT::RVec<float> missingVertexDistances(const ROOT::RVec<float> &bx) {
 namespace proc {
 
 ROOT::RDF::RNode BlipProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
-    (void)st;
     auto proc_df = df.Define("blip_process_code", encodeBlipProcesses, {"blip_process"});
 
     if (proc_df.HasColumn("neutrino_vertex_x")) {
