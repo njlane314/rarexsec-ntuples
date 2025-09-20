@@ -2,8 +2,6 @@
 
 #include <rarexsec/Logger.h>
 
-#include <unordered_set>
-
 namespace proc {
 namespace {
 
@@ -99,18 +97,7 @@ ROOT::RDF::RNode SamplePipeline::makeDataFrame(const std::string &base_dir, cons
     df = applyExclusionKeys(df, descriptor_.truth_exclusions, all_samples_json);
     const auto requested_columns = var_reg.columnsFor(descriptor_.origin);
     if (!requested_columns.empty()) {
-        std::unordered_set<std::string> keep(requested_columns.begin(), requested_columns.end());
-        auto available_columns = df.GetColumnNames();
-        std::vector<std::string> drop_columns;
-        drop_columns.reserve(available_columns.size());
-        for (const auto &column : available_columns) {
-            if (keep.find(column) == keep.end()) {
-                drop_columns.push_back(column);
-            }
-        }
-        if (!drop_columns.empty()) {
-            df = df.DropColumns(drop_columns);
-        }
+        df = ROOT::RDF::RNode(df.Cache(requested_columns));
     }
     return df;
 }
