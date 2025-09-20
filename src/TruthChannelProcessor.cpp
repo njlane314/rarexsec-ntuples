@@ -41,15 +41,12 @@ ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigi
 ROOT::RDF::RNode TruthChannelProcessor::processData(ROOT::RDF::RNode df, SampleOrigin st) const {
     const auto [channel, channel_def] = channelInfoForDataSample(st);
 
-    auto mode_df = df.Define("genie_int_mode", []() { return -1; });
+    auto mode_df = df.Define("interaction_mode_category", []() { return -1; });
 
     auto channels_df =
-        mode_df.Define("incl_channel", [channel]() { return channel; })
-            .Alias("inclusive_strange_channels", "incl_channel")
-            .Define("excl_channel", [channel]() { return channel; })
-            .Alias("exclusive_strange_channels", "excl_channel")
-            .Define("channel_def", [channel_def]() { return channel_def; })
-            .Alias("channel_definitions", "channel_def");
+        mode_df.Define("inclusive_strange_channel_category", [channel]() { return channel; })
+            .Define("exclusive_strange_channel_category", [channel]() { return channel; })
+            .Define("channel_definition_category", [channel_def]() { return channel_def; });
 
     return next_ ? next_->process(channels_df, st) : channels_df;
 }
@@ -71,7 +68,7 @@ ROOT::RDF::RNode TruthChannelProcessor::defineCounts(ROOT::RDF::RNode df) const 
     auto proton_df = pion_df.Define("mc_n_proton", "count_proton");
 
     auto mode_df = proton_df.Define(
-        "genie_int_mode",
+        "interaction_mode_category",
         [](int mode) {
             switch (mode) {
             case 0:
@@ -94,8 +91,8 @@ ROOT::RDF::RNode TruthChannelProcessor::defineCounts(ROOT::RDF::RNode df) const 
 }
 
 ROOT::RDF::RNode TruthChannelProcessor::assignInclusiveChannels(ROOT::RDF::RNode df) const {
-    auto incl_chan_df = df.Define(
-        "incl_channel",
+    auto inclusive_channel_df = df.Define(
+        "inclusive_strange_channel_category",
         [](bool fv, int nu, int cc, int s, int np, int npi) {
             if (!fv) {
                 return 98;
@@ -133,14 +130,12 @@ ROOT::RDF::RNode TruthChannelProcessor::assignInclusiveChannels(ROOT::RDF::RNode
          "mc_n_proton",
          "mc_n_pion"});
 
-    auto incl_alias_df = incl_chan_df.Define("inclusive_strange_channels", "incl_channel");
-
-    return incl_alias_df;
+    return inclusive_channel_df;
 }
 
 ROOT::RDF::RNode TruthChannelProcessor::assignExclusiveChannels(ROOT::RDF::RNode df) const {
-    auto excl_chan_df = df.Define(
-        "excl_channel",
+    auto exclusive_channel_df = df.Define(
+        "exclusive_strange_channel_category",
         [](bool fv, int nu, int cc, int s, int kp, int km, int k0, int lam, int sp, int s0, int sm) {
             if (!fv) {
                 return 98;
@@ -204,14 +199,12 @@ ROOT::RDF::RNode TruthChannelProcessor::assignExclusiveChannels(ROOT::RDF::RNode
          "count_sigma_zero",
          "count_sigma_minus"});
 
-    auto excl_alias_df = excl_chan_df.Define("exclusive_strange_channels", "excl_channel");
-
-    return excl_alias_df;
+    return exclusive_channel_df;
 }
 
 ROOT::RDF::RNode TruthChannelProcessor::assignChannelDefinitions(ROOT::RDF::RNode df) const {
     auto chan_df = df.Define(
-        "channel_def",
+        "channel_definition_category",
         [](bool fv, int nu, int cc, int s, int npi, int np, int npi0, int ngamma) {
             if (!fv) {
                 if (nu == 0) {
@@ -257,10 +250,9 @@ ROOT::RDF::RNode TruthChannelProcessor::assignChannelDefinitions(ROOT::RDF::RNod
          "count_pi_zero",
          "count_gamma"});
 
-    auto alias_df = chan_df.Define("channel_definitions", "channel_def");
-
-    auto signal_df = alias_df.Define("is_truth_signal", [](int ch) { return ch == 15 || ch == 16; },
-                                     {"channel_definitions"});
+    auto signal_df =
+        chan_df.Define("is_truth_signal", [](int ch) { return ch == 15 || ch == 16; },
+                       {"channel_definition_category"});
 
     auto pure_sig_df = signal_df.Define(
         "pure_slice_signal",
