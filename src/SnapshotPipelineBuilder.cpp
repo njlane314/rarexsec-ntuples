@@ -137,6 +137,7 @@ SnapshotPipelineBuilder::SnapshotPipelineBuilder(const RunConfigRegistry &run_co
       blind_(blind),
       total_pot_(0.0),
       total_triggers_(0) {
+    var_registry_.setBeamMode(beam_);
     this->loadAll();
 }
 
