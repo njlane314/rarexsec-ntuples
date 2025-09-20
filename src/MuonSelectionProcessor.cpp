@@ -37,9 +37,9 @@ ROOT::RVec<bool> makeMuonMask(const ROOT::RVec<float> &scores, const ROOT::RVec<
     ROOT::RVec<bool> mask;
     mask.reserve(track_count);
     for (std::size_t idx = 0; idx < track_count; ++idx) {
-        mask.emplace_back(isMuonCandidate(scores[idx], llr[idx], lengths[idx], dists[idx], gens[idx], start_x[idx],
-                                          start_y[idx], start_z[idx], end_x[idx], end_y[idx], end_z[idx],
-                                          plane_hits_u[idx], plane_hits_v[idx], plane_hits_y[idx]));
+        mask.emplace_back(selc::isMuonCandidate(scores[idx], llr[idx], lengths[idx], dists[idx], gens[idx], start_x[idx],
+                                               start_y[idx], start_z[idx], end_x[idx], end_y[idx], end_z[idx],
+                                               plane_hits_u[idx], plane_hits_v[idx], plane_hits_y[idx]));
     }
     return mask;
 }
@@ -47,11 +47,11 @@ ROOT::RVec<bool> makeMuonMask(const ROOT::RVec<float> &scores, const ROOT::RVec<
 template <typename T>
 ROOT::RDF::RNode defineMaskedColumn(ROOT::RDF::RNode node, std::string_view alias, std::string_view column) {
     ROOT::RDF::ColumnNames_t columns{std::string(column), "muon_mask"};
-    return node.Define(std::string(alias), filterByMask<T>, columns);
+    return node.Define(std::string(alias), selc::filterByMask<T>, columns);
 }
 
 ROOT::RVec<float> computeMaskedCosTheta(const ROOT::RVec<float> &theta, const ROOT::RVec<bool> &mask) {
-    return transformByMask(theta, mask, [](float angle) { return static_cast<float>(std::cos(angle)); });
+    return selc::transformByMask(theta, mask, [](float angle) { return static_cast<float>(std::cos(angle)); });
 }
 
 } // namespace
