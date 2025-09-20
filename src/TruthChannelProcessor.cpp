@@ -4,6 +4,34 @@
 #include <cmath>
 
 namespace proc {
+namespace {
+
+int channelForNonMcSample(SampleOrigin origin) {
+    switch (origin) {
+    case SampleOrigin::kData:
+        return 0;
+    case SampleOrigin::kExternal:
+        return 1;
+    case SampleOrigin::kDirt:
+        return 2;
+    default:
+        return 99;
+    }
+}
+
+int channelDefinitionForNonMcSample(SampleOrigin origin) {
+    switch (origin) {
+    case SampleOrigin::kData:
+        return 0;
+    case SampleOrigin::kExternal:
+    case SampleOrigin::kDirt:
+        return 1;
+    default:
+        return 99;
+    }
+}
+
+} // namespace
 
 ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
     if (st != SampleOrigin::kMonteCarlo) {
@@ -18,51 +46,20 @@ ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigi
 }
 
 ROOT::RDF::RNode TruthChannelProcessor::processNonMc(ROOT::RDF::RNode df, SampleOrigin st) const {
+    const auto channel = channelForNonMcSample(st);
+    const auto channel_def = channelDefinitionForNonMcSample(st);
+
     auto mode_df = df.Define("genie_int_mode", []() { return -1; });
 
-    auto incl_df = mode_df.Define("incl_channel", [c = st]() {
-        if (c == SampleOrigin::kData) {
-            return 0;
-        }
-        if (c == SampleOrigin::kExternal) {
-            return 1;
-        }
-        if (c == SampleOrigin::kDirt) {
-            return 2;
-        }
-        return 99;
-    });
+    auto channels_df =
+        mode_df.Define("incl_channel", [channel]() { return channel; })
+            .Alias("inclusive_strange_channels", "incl_channel")
+            .Define("excl_channel", [channel]() { return channel; })
+            .Alias("exclusive_strange_channels", "excl_channel")
+            .Define("channel_def", [channel_def]() { return channel_def; })
+            .Alias("channel_definitions", "channel_def");
 
-    auto incl_alias_df = incl_df.Define("inclusive_strange_channels", "incl_channel");
-
-    auto excl_df = incl_alias_df.Define("excl_channel", [c = st]() {
-        if (c == SampleOrigin::kData) {
-            return 0;
-        }
-        if (c == SampleOrigin::kExternal) {
-            return 1;
-        }
-        if (c == SampleOrigin::kDirt) {
-            return 2;
-        }
-        return 99;
-    });
-
-    auto excl_alias_df = excl_df.Define("exclusive_strange_channels", "excl_channel");
-
-    auto chan_df = excl_alias_df.Define("channel_def", [c = st]() {
-        if (c == SampleOrigin::kData) {
-            return 0;
-        }
-        if (c == SampleOrigin::kExternal || c == SampleOrigin::kDirt) {
-            return 1;
-        }
-        return 99;
-    });
-
-    auto chan_alias_df = chan_df.Define("channel_definitions", "channel_def");
-
-    return next_ ? next_->process(chan_alias_df, st) : chan_alias_df;
+    return next_ ? next_->process(channels_df, st) : channels_df;
 }
 
 ROOT::RDF::RNode TruthChannelProcessor::defineCounts(ROOT::RDF::RNode df) const {
