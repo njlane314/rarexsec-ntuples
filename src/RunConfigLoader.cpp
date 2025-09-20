@@ -1,7 +1,6 @@
 #include <rarexsec/RunConfigLoader.h>
 
 #include <fstream>
-#include <stdexcept>
 
 #include <rarexsec/Logger.h>
 
