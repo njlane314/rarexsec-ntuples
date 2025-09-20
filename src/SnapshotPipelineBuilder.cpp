@@ -192,11 +192,17 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
 
         for (const auto &components : directories) {
+            if (components.empty()) {
+                continue;
+            }
+
             const std::string directory_path = componentsToPath(components);
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Ensuring directory path", directory_path);
             TDirectory *current = file.get();
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting at directory", current->GetPath());
-            for (const auto &component : components) {
+            const std::size_t last_index = components.size() - 1;
+            for (std::size_t idx = 0; idx < last_index; ++idx) {
+                const auto &component = components[idx];
                 if (component.empty()) {
                     continue;
                 }
