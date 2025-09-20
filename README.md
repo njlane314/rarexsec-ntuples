@@ -81,6 +81,9 @@ relative file paths.
   `RDataFrame::Filter` syntax.
 - Supply an output file to snapshot the selected events. When omitted the tool
   prints the available branches for each configured sample.
+- Include details such as the beam, period, and selection in the output file
+  name to keep it self-descriptive; for example,
+  `snapshot_fhc_r1-3_nuepre.root`.
 - Snapshots include only the curated branch list defined in
   `requestedSnapshotColumns()` within `app/snapshot.cpp`.
 
@@ -99,7 +102,9 @@ The training pool command records the event identifiers, weights, truth-channel
 labels, and CNN-friendly image tensors while retaining the same snapshot layout
 as the snapshot tool. It honours the same period syntax as the snapshot runner,
 so comma-separated lists (`run1,run2,run3`) or additional run tokens supplied as
-separate arguments are all valid.
+separate arguments are all valid. Use a descriptive output name such as
+`train_fhc_all_nuepre.root` so the resulting ROOT files can be quickly traced
+back to their configuration.
 
 ## Snapshot layout
 
