@@ -5,7 +5,7 @@
 
 namespace proc {
 
-FilterExpression muNuCCSelection();
+FilterExpression nuMuCCSelection();
 
 }
 
