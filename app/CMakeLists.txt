@@ -1,27 +1,27 @@
-add_executable(snapshot)
-add_executable(rarexsec::runner ALIAS snapshot)
+add_executable(snapshot-analysis)
+add_executable(rarexsec::runner ALIAS snapshot-analysis)
 
-target_sources(snapshot PRIVATE snapshot.cpp)
+target_sources(snapshot-analysis PRIVATE snapshot_analysis.cpp)
 
-target_link_libraries(snapshot PRIVATE rarexsec::processing)
+target_link_libraries(snapshot-analysis PRIVATE rarexsec::processing)
 
-target_compile_features(snapshot PRIVATE cxx_std_17)
+target_compile_features(snapshot-analysis PRIVATE cxx_std_17)
 
-set_target_properties(snapshot PROPERTIES EXPORT_NAME runner)
+set_target_properties(snapshot-analysis PROPERTIES EXPORT_NAME runner)
 
-add_executable(training-pool)
-add_executable(rarexsec::training_pool ALIAS training-pool)
+add_executable(snapshot-training)
+add_executable(rarexsec::training_pool ALIAS snapshot-training)
 
-target_sources(training-pool PRIVATE training_pool.cpp)
+target_sources(snapshot-training PRIVATE snapshot_training.cpp)
 
-target_link_libraries(training-pool PRIVATE rarexsec::processing)
+target_link_libraries(snapshot-training PRIVATE rarexsec::processing)
 
-target_compile_features(training-pool PRIVATE cxx_std_17)
+target_compile_features(snapshot-training PRIVATE cxx_std_17)
 
-set_target_properties(training-pool PROPERTIES EXPORT_NAME training_pool)
+set_target_properties(snapshot-training PROPERTIES EXPORT_NAME training_pool)
 
 install(
-    TARGETS snapshot training-pool
+    TARGETS snapshot-analysis snapshot-training
     EXPORT ${RAREXSEC_EXPORT_SET}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

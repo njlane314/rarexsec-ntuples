@@ -60,10 +60,10 @@ relative file paths.
 
 ## Run the command-line tools
 
-### Snapshot tool
+### Snapshot analysis tool
 
 ```bash
-./build/app/snapshot/snapshot \
+./build/app/snapshot-analysis/snapshot-analysis \
     data/catalogues/samples.json \
     numi-fhc \
     run1-run3 \
@@ -85,12 +85,12 @@ relative file paths.
   name to keep it self-descriptive; for example,
   `snapshot_fhc_r1-3_nuepre.root`.
 - Snapshots include only the curated branch list defined in
-  `requestedSnapshotColumns()` within `app/snapshot.cpp`.
+  `requestedSnapshotColumns()` within `app/snapshot_analysis.cpp`.
 
-### Training pool tool
+### Snapshot training tool
 
 ```bash
-./build/app/training-pool/training-pool \
+./build/app/snapshot-training/snapshot-training \
     data/catalogues/samples.json \
     numi-fhc \
     all \
@@ -100,11 +100,9 @@ relative file paths.
 
 The training pool command records the event identifiers, weights, truth-channel
 labels, and CNN-friendly image tensors while retaining the same snapshot layout
-as the snapshot tool. It honours the same period syntax as the snapshot runner,
-so comma-separated lists (`run1,run2,run3`) or additional run tokens supplied as
-separate arguments are all valid. Use a descriptive output name such as
-`train_fhc_all_nuepre.root` so the resulting ROOT files can be quickly traced
-back to their configuration.
+as the snapshot analysis tool. It honours the same period syntax as
+`snapshot-analysis`, so comma-separated lists (`run1,run2,run3`) or additional
+run tokens supplied as separate arguments are all valid.
 
 ## Snapshot layout
 
