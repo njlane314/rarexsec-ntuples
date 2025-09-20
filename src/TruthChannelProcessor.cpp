@@ -48,7 +48,14 @@ ROOT::RDF::RNode TruthChannelProcessor::processData(ROOT::RDF::RNode df, SampleO
             .Define("exclusive_strange_channel_category", [channel]() { return channel; })
             .Define("channel_definition_category", [channel_def]() { return channel_def; });
 
-    return next_ ? next_->process(channels_df, st) : channels_df;
+    auto defaults_df = channels_df.Define("in_fiducial", []() { return false; })
+                           .Define("mc_n_strange", []() { return 0; })
+                           .Define("mc_n_pion", []() { return 0; })
+                           .Define("mc_n_proton", []() { return 0; })
+                           .Define("is_truth_signal", []() { return false; })
+                           .Define("pure_slice_signal", []() { return false; });
+
+    return next_ ? next_->process(defaults_df, st) : defaults_df;
 }
 
 ROOT::RDF::RNode TruthChannelProcessor::defineCounts(ROOT::RDF::RNode df) const {
