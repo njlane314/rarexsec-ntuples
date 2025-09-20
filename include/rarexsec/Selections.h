@@ -4,11 +4,9 @@
 #include <rarexsec/FilterExpression.h>
 
 namespace proc {
-namespace selection {
 
 FilterExpression muonNeutrinoChargedCurrentSelection();
 
-} // namespace selection
 } // namespace proc
 
 #endif
