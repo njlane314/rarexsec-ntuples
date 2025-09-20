@@ -56,27 +56,27 @@ class VariableRegistry {
     }
 
     static const KnobVariations &knobVariations() {
-        static const KnobVariations m = {
-            {"RPA", {"knobRPAup", "knobRPAdn"}},
-            {"CCMEC", {"knobCCMECup", "knobCCMECdn"}},
-            {"AxFFCCQE", {"knobAxFFCCQEup", "knobAxFFCCQEdn"}},
-            {"VecFFCCQE", {"knobVecFFCCQEup", "knobVecFFCCQEdn"}},
-            {"DecayAngMEC", {"knobDecayAngMECup", "knobDecayAngMECdn"}},
-            {"ThetaDelta2Npi", {"knobThetaDelta2Npiup", "knobThetaDelta2Npidn"}},
-            {"ThetaDelta2NRad", {"knobThetaDelta2NRadup", "knobThetaDelta2NRaddn"}},
-            {"NormCCCOH", {"knobNormCCCOHup", "knobNormCCCOHdn"}},
-            {"NormNCCOH", {"knobNormNCCOHup", "knobNormNCCOHdn"}},
-            {"xsr_scc_Fv3", {"knobxsr_scc_Fv3up", "knobxsr_scc_Fv3dn"}},
-            {"xsr_scc_Fa3", {"knobxsr_scc_Fa3up", "knobxsr_scc_Fa3dn"}}};
+        static const KnobVariations m = {{"RPA", {"knobRPAup", "knobRPAdn"}},
+                                         {"CCMEC", {"knobCCMECup", "knobCCMECdn"}},
+                                         {"AxFFCCQE", {"knobAxFFCCQEup", "knobAxFFCCQEdn"}},
+                                         {"VecFFCCQE", {"knobVecFFCCQEup", "knobVecFFCCQEdn"}},
+                                         {"DecayAngMEC", {"knobDecayAngMECup", "knobDecayAngMECdn"}},
+                                         {"ThetaDelta2Npi", {"knobThetaDelta2Npiup", "knobThetaDelta2Npidn"}},
+                                         {"ThetaDelta2NRad", {"knobThetaDelta2NRadup", "knobThetaDelta2NRaddn"}},
+                                         {"NormCCCOH", {"knobNormCCCOHup", "knobNormCCCOHdn"}},
+                                         {"NormNCCOH", {"knobNormNCCOHup", "knobNormNCCOHdn"}},
+                                         {"xsr_scc_Fv3", {"knobxsr_scc_Fv3up", "knobxsr_scc_Fv3dn"}},
+                                         {"xsr_scc_Fa3", {"knobxsr_scc_Fa3up", "knobxsr_scc_Fa3dn"}}};
 
         return m;
     }
 
     static const MultiUniverseVars &multiUniverseVariations() {
-        static const MultiUniverseVars m = {{"weightsGenie", 500},
-                                            {"weightsFlux", 500},
-                                            {"weightsReint", 500},
-                                            {"weightsPPFX", 500}};
+        static const MultiUniverseVars m = {
+            {"weightsGenie", 500},
+            {"weightsFlux", 500},
+            {"weightsReint", 500},
+            {"weightsPPFX", 500}};
 
         return m;
     }
@@ -131,7 +131,10 @@ class VariableRegistry {
     }
 
     static const std::vector<std::string> &baseVariables() {
-        static const std::vector<std::string> v = {"run", "sub", "evt"};
+        static const std::vector<std::string> v = {
+            "run",
+            "sub",
+            "evt"};
 
         return v;
     }

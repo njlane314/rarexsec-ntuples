@@ -40,7 +40,9 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
                 }
                 return final_weight;
             },
-            {"base_event_weight", "weightSpline", "weightTune"});
+            {"base_event_weight",
+             "weightSpline",
+             "weightTune"});
     } else if (st == SampleOrigin::kExternal) {
         double scale = 1.0;
         if (sample_triggers_ > 0 && total_run_triggers_ > 0) {

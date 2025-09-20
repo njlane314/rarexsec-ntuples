@@ -65,9 +65,20 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
     return df.Define(
         "muon_mask",
         makeMuonMask,
-        {"track_shower_scores", "trk_llr_pid_v", "track_length", "track_distance_to_vertex", "track_start_x",
-         "track_start_y", "track_start_z", "track_end_x", "track_end_y", "track_end_z", "pfp_generations",
-         "pfp_num_plane_hits_U", "pfp_num_plane_hits_V", "pfp_num_plane_hits_Y"});
+        {"track_shower_scores",
+         "trk_llr_pid_v",
+         "track_length",
+         "track_distance_to_vertex",
+         "track_start_x",
+         "track_start_y",
+         "track_start_z",
+         "track_end_x",
+         "track_end_y",
+         "track_end_z",
+         "pfp_generations",
+         "pfp_num_plane_hits_U",
+         "pfp_num_plane_hits_V",
+         "pfp_num_plane_hits_Y"});
 }
 
 ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df) const {
@@ -77,7 +88,9 @@ ROOT::RDF::RNode MuonSelectionProcessor::extractMuonFeatures(ROOT::RDF::RNode df
 
     df = defineMaskedColumn<unsigned>(df, "muon_pfp_generation_v", "pfp_generations");
 
-    return df.Define("muon_track_costheta", computeMaskedCosTheta, {"track_theta", "muon_mask"})
+    return df.Define("muon_track_costheta", computeMaskedCosTheta,
+                     {"track_theta",
+                      "muon_mask"})
              .Define("n_muons_tot", "ROOT::VecOps::Sum(muon_mask)")
              .Define("has_muon", "n_muons_tot > 0");
 }
