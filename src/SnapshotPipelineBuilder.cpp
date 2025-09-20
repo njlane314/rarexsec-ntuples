@@ -36,6 +36,26 @@ std::string sanitiseComponent(std::string value) {
     return sanitised;
 }
 
+std::string canonicaliseBeamName(const std::string &beam) {
+    std::string trimmed = beam;
+    const auto begin = trimmed.find_first_not_of(" \t\n\r");
+    if (begin == std::string::npos) {
+        return {};
+    }
+    const auto end = trimmed.find_last_not_of(" \t\n\r");
+    trimmed = trimmed.substr(begin, end - begin + 1);
+
+    for (char &ch : trimmed) {
+        if (ch == '_') {
+            ch = '-';
+        } else {
+            ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        }
+    }
+
+    return trimmed;
+}
+
 std::vector<std::string> baseDirectoryComponents(const proc::SampleKey &sample_key, const std::string &beam,
                                                  const std::string &period, proc::SampleOrigin origin,
                                                  const std::string &stage_name) {
@@ -181,7 +201,16 @@ void SnapshotPipelineBuilder::printAllBranches() const {
 }
 
 void SnapshotPipelineBuilder::loadAll() {
-    const std::string ext_beam{"numi_ext"};
+    const std::string canonical_ext = canonicaliseBeamName("numi-ext");
+    std::string ext_beam;
+    for (const auto &[label, config] : run_registry_.all()) {
+        (void)label;
+        if (canonicaliseBeamName(config.beamMode()) == canonical_ext) {
+            ext_beam = config.beamMode();
+            break;
+        }
+    }
+
     std::vector<const RunConfig *> configs_to_process;
     for (auto &period : periods_) {
         const auto &rc = run_registry_.get(beam_, period);
@@ -189,12 +218,14 @@ void SnapshotPipelineBuilder::loadAll() {
         total_triggers_ += rc.nominalTriggers();
         configs_to_process.push_back(&rc);
 
-        auto key = ext_beam + ":" + period;
-        if (run_registry_.all().count(key)) {
-            const auto &ext_rc = run_registry_.get(ext_beam, period);
-            total_pot_ += ext_rc.nominalPot();
-            total_triggers_ += ext_rc.nominalTriggers();
-            configs_to_process.push_back(&ext_rc);
+        if (!ext_beam.empty()) {
+            auto key = ext_beam + ":" + period;
+            if (run_registry_.all().count(key)) {
+                const auto &ext_rc = run_registry_.get(ext_beam, period);
+                total_pot_ += ext_rc.nominalPot();
+                total_triggers_ += ext_rc.nominalTriggers();
+                configs_to_process.push_back(&ext_rc);
+            }
         }
     }
 

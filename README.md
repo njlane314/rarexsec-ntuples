@@ -65,13 +65,18 @@ relative file paths.
 ```bash
 ./build/app/snapshot/snapshot \
     data/catalogues/samples.json \
-    numi \
-    run1,run2 \
+    numi-fhc \
+    run1-run3 \
     [optional-selection] \
     [optional-output.root]
 ```
 
-- Arguments 1–3 select the catalogue, beam, and comma-separated run periods.
+- Arguments 1–3 select the catalogue, beam, and run periods. Beam modes follow
+  the catalogue naming (for example `numi-fhc`, `numi-rhc`, or `bnb`). Periods
+  accept comma-separated values like `run1,run2,run3`, numeric ranges such as
+  `run1-run3`, or the special value `all` to process every configured run
+  period. You can also append additional run tokens as separate arguments (for
+  example `... run1 run2 run3 ...`) without quoting.
 - Provide a filter expression to `optional-selection` to trim events with
   `RDataFrame::Filter` syntax.
 - Supply an output file to snapshot the selected events. When omitted the tool
@@ -82,15 +87,17 @@ relative file paths.
 ```bash
 ./build/app/training-pool/training-pool \
     data/catalogues/samples.json \
-    numi \
-    run1,run2 \
+    numi-fhc \
+    all \
     [optional-selection] \
     output.root
 ```
 
 The training pool command records the event identifiers, weights, truth-channel
 labels, and CNN-friendly image tensors while retaining the same snapshot layout
-as the snapshot tool.
+as the snapshot tool. It honours the same period syntax as the snapshot runner,
+so comma-separated lists (`run1,run2,run3`) or additional run tokens supplied as
+separate arguments are all valid.
 
 ## Snapshot layout
 

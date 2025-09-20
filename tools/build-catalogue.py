@@ -29,9 +29,10 @@ def norm_run(run: str) -> str:
     return f"r{digits}" if digits else run
 
 def split_beam_key(beam_key: str) -> tuple[str, str]:
-    if "_" in beam_key:
-        b, m = beam_key.split("_", 1)
-        return b, m
+    for sep in ("_", "-"):
+        if sep in beam_key:
+            b, m = beam_key.split(sep, 1)
+            return b, m
     return beam_key, "data"
 
 def runset_token(runs: list[str]) -> str:
@@ -56,7 +57,12 @@ def summarise_beams_for_name(beam_keys: list[str]) -> str:
     if has_bnb:
         return "bnb"
     if has_nu:
-        pols = sorted({k.split("_", 1)[1] for k in beams if "_" in k and k != "numi_ext"})
+        pols = sorted({
+            mode.lower()
+            for k in beams
+            for mode in [split_beam_key(k)[1]]
+            if mode and mode.lower() not in {"data", "ext"}
+        })
         pol_str = f"[{','.join(pols)}]" if pols else ""
         return f"nu{pol_str}"
     return "multi"
@@ -400,13 +406,14 @@ def main() -> None:
             continue
 
         beamline, mode = split_beam_key(beam_key)
+        mode = mode.lower()
 
         for run, run_details in run_block.items():
             if run == "active":
                 continue
 
             logging.info("Processing %s:%s", beam_key, run)
-            is_ext = (mode == "ext") or beam_key.endswith("_ext")
+            is_ext = (mode == "ext")
             pot = float(run_details.get("pot", 0.0)) if not is_ext else 0.0
             ext_trig = int(run_details.get("ext_triggers", 0)) if is_ext else 0
             if not is_ext and pot == 0.0:
