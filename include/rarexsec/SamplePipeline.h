@@ -54,7 +54,7 @@ class SamplePipeline {
 
     ROOT::RDF::RNode makeDataFrame(const std::string &base_dir, const VariableRegistry &var_reg,
                                    EventProcessorStage &processor, const std::string &rel_path,
-                                   const nlohmann::json &all_samples_json);
+                                   const SampleKey &sample_key, const nlohmann::json &all_samples_json);
 };
 
 }

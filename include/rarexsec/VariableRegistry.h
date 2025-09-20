@@ -18,40 +18,95 @@ class VariableRegistry {
     using MultiUniverseVars = std::unordered_map<std::string, unsigned>;
     using ColumnCollection = std::vector<std::string>;
 
-    void includeCommonColumn(const std::string &column) { common_columns_.push_back(column); }
+    struct ColumnPlan {
+        ColumnCollection required;
+        ColumnCollection optional;
+    };
+
+    void includeCommonColumn(const std::string &column) { common_required_columns_.push_back(column); }
 
     void includeCommonColumns(const ColumnCollection &columns) {
-        common_columns_.insert(common_columns_.end(), columns.begin(), columns.end());
+        common_required_columns_.insert(common_required_columns_.end(), columns.begin(), columns.end());
     }
 
-    void includeColumn(SampleOrigin origin, const std::string &column) {
-        origin_columns_[origin].push_back(column);
+    void includeCommonOptionalColumn(const std::string &column) { common_optional_columns_.push_back(column); }
+
+    void includeCommonOptionalColumns(const ColumnCollection &columns) {
+        common_optional_columns_.insert(common_optional_columns_.end(), columns.begin(), columns.end());
     }
 
-    void includeColumns(SampleOrigin origin, const ColumnCollection &columns) {
-        auto &bucket = origin_columns_[origin];
+    void includeRequiredColumn(SampleOrigin origin, const std::string &column) {
+        origin_column_plans_[origin].required.push_back(column);
+    }
+
+    void includeRequiredColumns(SampleOrigin origin, const ColumnCollection &columns) {
+        auto &bucket = origin_column_plans_[origin].required;
         bucket.insert(bucket.end(), columns.begin(), columns.end());
     }
 
-    ColumnCollection columnsFor(SampleOrigin type) const {
-        ColumnCollection columns = eventVariables(type);
-        std::unordered_set<std::string> seen(columns.begin(), columns.end());
+    void includeOptionalColumn(SampleOrigin origin, const std::string &column) {
+        origin_column_plans_[origin].optional.push_back(column);
+    }
 
-        for (const auto &column : common_columns_) {
-            if (seen.insert(column).second) {
-                columns.push_back(column);
+    void includeOptionalColumns(SampleOrigin origin, const ColumnCollection &columns) {
+        auto &bucket = origin_column_plans_[origin].optional;
+        bucket.insert(bucket.end(), columns.begin(), columns.end());
+    }
+
+    void includeColumn(SampleOrigin origin, const std::string &column) { includeRequiredColumn(origin, column); }
+
+    void includeColumns(SampleOrigin origin, const ColumnCollection &columns) {
+        includeRequiredColumns(origin, columns);
+    }
+
+    ColumnPlan columnPlanFor(SampleOrigin type) const {
+        ColumnPlan plan;
+        std::unordered_set<std::string> required_seen;
+        for (const auto &column : eventVariables(type)) {
+            if (required_seen.insert(column).second) {
+                plan.required.push_back(column);
             }
         }
 
-        auto it = origin_columns_.find(type);
-        if (it != origin_columns_.end()) {
-            for (const auto &column : it->second) {
-                if (seen.insert(column).second) {
-                    columns.push_back(column);
+        for (const auto &column : common_required_columns_) {
+            if (required_seen.insert(column).second) {
+                plan.required.push_back(column);
+            }
+        }
+
+        auto origin_it = origin_column_plans_.find(type);
+        if (origin_it != origin_column_plans_.end()) {
+            for (const auto &column : origin_it->second.required) {
+                if (required_seen.insert(column).second) {
+                    plan.required.push_back(column);
                 }
             }
         }
 
+        std::unordered_set<std::string> optional_seen;
+        for (const auto &column : common_optional_columns_) {
+            if (!required_seen.count(column) && optional_seen.insert(column).second) {
+                plan.optional.push_back(column);
+            }
+        }
+
+        if (origin_it != origin_column_plans_.end()) {
+            for (const auto &column : origin_it->second.optional) {
+                if (!required_seen.count(column) && optional_seen.insert(column).second) {
+                    plan.optional.push_back(column);
+                }
+            }
+        }
+
+        return plan;
+    }
+
+    ColumnCollection columnsFor(SampleOrigin type) const {
+        ColumnCollection columns;
+        const auto plan = columnPlanFor(type);
+        columns.reserve(plan.required.size() + plan.optional.size());
+        columns.insert(columns.end(), plan.required.begin(), plan.required.end());
+        columns.insert(columns.end(), plan.optional.begin(), plan.optional.end());
         return columns;
     }
 
@@ -549,9 +604,9 @@ class VariableRegistry {
 
     return v;
   }
-    std::vector<std::string> common_columns_;
-
-    std::map<SampleOrigin, std::vector<std::string>> origin_columns_;
+    ColumnCollection common_required_columns_;
+    ColumnCollection common_optional_columns_;
+    std::map<SampleOrigin, ColumnPlan> origin_column_plans_;
 };
 
 }
