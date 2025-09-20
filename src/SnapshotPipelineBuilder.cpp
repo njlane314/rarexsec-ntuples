@@ -152,61 +152,86 @@ const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey 
 void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
                                        const std::vector<std::string> &columns) const {
     bool wrote_anything = false;
-    bool file_initialised = false;
     ROOT::RDF::RSnapshotOptions opts;
     opts.fMode = "UPDATE";
 
-    const auto ensureDirectory = [&](const std::vector<std::string> &components) {
-        const char *mode = file_initialised ? "UPDATE" : "RECREATE";
-        std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), mode)};
-        if (!file || file->IsZombie()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
-                       "with mode", mode);
+    const auto initialiseOutputDirectories = [&](const std::vector<std::vector<std::string>> &directories) {
+        if (directories.empty()) {
+            return;
         }
 
-        TDirectory *current = file.get();
-        for (const auto &component : components) {
-            if (component.empty()) {
-                continue;
+        std::unique_ptr<TFile> file{TFile::Open(output_file.c_str(), "RECREATE")};
+        if (!file || file->IsZombie()) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
+                       "with mode", "RECREATE");
+        }
+
+        for (const auto &components : directories) {
+            TDirectory *current = file.get();
+            for (const auto &component : components) {
+                if (component.empty()) {
+                    continue;
+                }
+
+                TDirectory *next = current->GetDirectory(component.c_str());
+                if (!next) {
+                    next = current->mkdir(component.c_str());
+                }
+                if (!next) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component", component,
+                               "in", output_file);
+                }
+                current = next;
             }
-            TDirectory *next = current->GetDirectory(component.c_str());
-            if (!next) {
-                next = current->mkdir(component.c_str(), "", /*returnExistingDirectory=*/true);
-            }
-            if (!next) {
-                log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component", component,
-                           "in", output_file);
-            }
-            current = next;
         }
 
         file->Write("", TObject::kOverwrite);
-        file_initialised = true;
     };
+
+    std::vector<std::vector<std::string>> directories_to_create;
+    directories_to_create.reserve(frames_.size());
 
     std::size_t total_trees = 0;
     for (const auto &[key, sample] : frames_) {
-        (void)key;
+        const auto *rc = this->getRunConfigForSample(key);
+        const std::string sample_beam = rc ? rc->beamMode() : std::string{};
+        const std::string sample_period = rc ? rc->runPeriod() : std::string{};
+        const std::string &sample_stage = sample.stageName();
+
+        directories_to_create.push_back(
+            nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage));
         ++total_trees;
+
         const auto &variation_nodes = sample.variationNodes();
         for (const auto &variation_def : sample.variationDescriptors()) {
-            if (variation_nodes.count(variation_def.variation)) {
-                ++total_trees;
+            if (!variation_nodes.count(variation_def.variation)) {
+                continue;
             }
+
+            const auto *variation_rc = this->getRunConfigForSample(variation_def.sample_key);
+            const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
+            const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
+            const std::string &variation_stage =
+                variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
+
+            directories_to_create.push_back(variationDirectoryComponents(key, variation_def, variation_beam,
+                                                                         variation_period, sample.sampleOrigin(),
+                                                                         variation_stage));
+            ++total_trees;
         }
     }
+
+    initialiseOutputDirectories(directories_to_create);
 
     std::size_t processed_trees = 0;
     if (total_trees > 0) {
         log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
     }
 
-    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::vector<std::string> &dir_components,
-                             const std::string &tree_path) {
+    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &tree_path) {
         if (!filter_expr.empty()) {
             df = df.Filter(filter_expr);
         }
-        ensureDirectory(dir_components);
         df.Snapshot(tree_path, output_file, columns, opts);
         wrote_anything = true;
         ++processed_trees;
@@ -220,11 +245,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const std::string sample_period = rc ? rc->runPeriod() : std::string{};
         const std::string &sample_stage = sample.stageName();
 
-        const auto nominal_components =
-            nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
         const auto nominal_tree_path =
             nominalTreePath(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
-        snapshot_tree(sample.nominalNode(), nominal_components, nominal_tree_path);
+        snapshot_tree(sample.nominalNode(), nominal_tree_path);
         const auto &variation_nodes = sample.variationNodes();
         for (const auto &variation_def : sample.variationDescriptors()) {
             auto it = variation_nodes.find(variation_def.variation);
@@ -237,12 +260,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const std::string &variation_stage =
                 variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
 
-            const auto variation_components = variationDirectoryComponents(key, variation_def, variation_beam,
-                                                                           variation_period, sample.sampleOrigin(),
-                                                                           variation_stage);
             const auto variation_tree_path = variationTreePath(key, variation_def, variation_beam, variation_period,
                                                                sample.sampleOrigin(), variation_stage);
-            snapshot_tree(it->second, variation_components, variation_tree_path);
+            snapshot_tree(it->second, variation_tree_path);
         }
     }
 
