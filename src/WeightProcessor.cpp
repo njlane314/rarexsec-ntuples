@@ -26,7 +26,7 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
         if (proc_df.HasColumn("base_event_weight")) {
             proc_df = proc_df.Redefine(
                 "base_event_weight",
-                [scale](const auto &weight) { return weight * scale; },
+                [scale](double weight) { return weight * scale; },
                 {"base_event_weight"});
         } else {
             proc_df = proc_df.Define("base_event_weight", [scale]() { return scale; });
@@ -58,7 +58,7 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
         if (proc_df.HasColumn("base_event_weight")) {
             proc_df = proc_df.Redefine(
                 "base_event_weight",
-                [scale](const auto &weight) { return weight * scale; },
+                [scale](double weight) { return weight * scale; },
                 {"base_event_weight"});
         } else {
             proc_df = proc_df.Define("base_event_weight", [scale]() { return scale; });
