@@ -1,7 +1,7 @@
 add_executable(snapshot)
 add_executable(rarexsec::runner ALIAS snapshot)
 
-target_sources(snapshot PRIVATE main.cpp)
+target_sources(snapshot PRIVATE snapshot.cpp)
 
 target_link_libraries(snapshot PRIVATE rarexsec::processing)
 
