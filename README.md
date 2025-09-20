@@ -173,3 +173,11 @@ void rarexsec_snapshot_example(const char *filename = "snapshot.root") {
 
 Use the same pattern to access detector variations (`variation` branch) or to
 aggregate POT across selected subsets.
+
+## ROOT macro quickstart
+
+```bash
+root -l rarexsec_snapshot_example.C
+root -l app/plot_example.C
+root -l app/print_root_structure.C
+```
