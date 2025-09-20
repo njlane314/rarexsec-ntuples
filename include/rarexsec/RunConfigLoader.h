@@ -3,15 +3,12 @@
 
 #include <string>
 
-#include <nlohmann/json.hpp>
-
 #include <rarexsec/RunConfigRegistry.h>
 
 namespace proc {
 
 class RunConfigLoader {
   public:
-    static void loadFromJson(const nlohmann::json &data, RunConfigRegistry &registry);
     static void loadFromFile(const std::string &config_path, RunConfigRegistry &registry);
 };
 
