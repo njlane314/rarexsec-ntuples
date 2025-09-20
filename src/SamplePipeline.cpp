@@ -44,13 +44,13 @@ SamplePipeline::SamplePipeline(const nlohmann::json &sample_json, const nlohmann
                                const std::string &base_dir, const VariableRegistry &var_reg,
                                EventProcessorStage &processor)
     : descriptor_{SampleDescriptor::fromJson(sample_json)},
-      nominal_node_{makeDataFrame(base_dir, var_reg, processor, descriptor_.relative_path, all_samples_json)} {
-    validateFiles(base_dir);
+      nominal_node_{this->makeDataFrame(base_dir, var_reg, processor, descriptor_.relative_path, all_samples_json)} {
+    this->validateFiles(base_dir);
     if (descriptor_.origin == SampleOrigin::kMonteCarlo) {
         for (const auto &variation_def : descriptor_.variations) {
             variation_nodes_.emplace(variation_def.variation,
-                                     makeDataFrame(base_dir, var_reg, processor, variation_def.relative_path,
-                                                   all_samples_json));
+                                     this->makeDataFrame(base_dir, var_reg, processor, variation_def.relative_path,
+                                                         all_samples_json));
         }
     }
 }

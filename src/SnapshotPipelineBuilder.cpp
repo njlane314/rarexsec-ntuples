@@ -117,7 +117,7 @@ SnapshotPipelineBuilder::SnapshotPipelineBuilder(const RunConfigRegistry &run_co
       blind_(blind),
       total_pot_(0.0),
       total_triggers_(0) {
-    loadAll();
+    this->loadAll();
 }
 
 const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey &sk) const {
@@ -159,13 +159,13 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         return;
     }
 
-    reorganiseSnapshotTrees(output_file);
-    writeSnapshotMetadata(output_file);
+    this->reorganiseSnapshotTrees(output_file);
+    this->writeSnapshotMetadata(output_file);
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
                                        const std::vector<std::string> &columns) const {
-    snapshot(query.str(), output_file, columns);
+    this->snapshot(query.str(), output_file, columns);
 }
 
 void SnapshotPipelineBuilder::printAllBranches() const {
@@ -199,7 +199,7 @@ void SnapshotPipelineBuilder::loadAll() {
     }
 
     for (const RunConfig *rc : configs_to_process) {
-        processRunConfig(*rc);
+        this->processRunConfig(*rc);
     }
 }
 
@@ -212,7 +212,7 @@ void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
             continue;
         }
 
-        auto pipeline = chainProcessorStages(
+        auto pipeline = this->chainProcessorStages(
             std::make_unique<WeightProcessor>(sample_json, total_pot_, total_triggers_),
             std::make_unique<TruthChannelProcessor>(), std::make_unique<BlipProcessor>(),
             std::make_unique<MuonSelectionProcessor>(), std::make_unique<ReconstructionProcessor>(),
@@ -279,7 +279,7 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_fi
     samples_tree.Branch("sample_triggers", &sample_triggers);
 
     for (auto const &[key, sample] : frames_) {
-        const auto *rc = getRunConfigForSample(key);
+        const auto *rc = this->getRunConfigForSample(key);
         const std::string sample_beam = rc ? rc->beamMode() : std::string{};
         const std::string sample_period = rc ? rc->runPeriod() : std::string{};
         const std::string &sample_stage = sample.stageName();
@@ -297,7 +297,7 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_fi
         samples_tree.Fill();
 
         for (const auto &variation_def : sample.variationDescriptors()) {
-            const auto *variation_rc = getRunConfigForSample(variation_def.sample_key);
+            const auto *variation_rc = this->getRunConfigForSample(variation_def.sample_key);
             const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
             const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
             const std::string &variation_stage =
@@ -373,7 +373,7 @@ void SnapshotPipelineBuilder::reorganiseSnapshotTrees(const std::string &output_
     };
 
     for (auto const &[key, sample] : frames_) {
-        const auto *rc = getRunConfigForSample(key);
+        const auto *rc = this->getRunConfigForSample(key);
         const std::string sample_beam = rc ? rc->beamMode() : std::string{};
         const std::string sample_period = rc ? rc->runPeriod() : std::string{};
         const std::string &sample_stage = sample.stageName();
@@ -381,7 +381,7 @@ void SnapshotPipelineBuilder::reorganiseSnapshotTrees(const std::string &output_
         moveTree(key.str(),
                  nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage));
         for (const auto &variation_def : sample.variationDescriptors()) {
-            const auto *variation_rc = getRunConfigForSample(variation_def.sample_key);
+            const auto *variation_rc = this->getRunConfigForSample(variation_def.sample_key);
             const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
             const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
             const std::string &variation_stage =
