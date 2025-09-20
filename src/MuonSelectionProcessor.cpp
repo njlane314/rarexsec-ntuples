@@ -17,8 +17,8 @@ ROOT::RDF::RNode MuonSelectionProcessor::buildMuonMask(ROOT::RDF::RNode df) cons
         [](const ROOT::RVec<float> &scores, const ROOT::RVec<float> &llr, const ROOT::RVec<float> &lengths,
            const ROOT::RVec<float> &dists, const ROOT::RVec<float> &start_x, const ROOT::RVec<float> &start_y,
            const ROOT::RVec<float> &start_z, const ROOT::RVec<float> &end_x, const ROOT::RVec<float> &end_y,
-           const ROOT::RVec<float> &end_z, const ROOT::RVec<unsigned> &gens, const auto &plane_hits_u,
-           const auto &plane_hits_v, const auto &plane_hits_y) {
+           const ROOT::RVec<float> &end_z, const ROOT::RVec<unsigned> &gens, const ROOT::RVec<int> &plane_hits_u,
+           const ROOT::RVec<int> &plane_hits_v, const ROOT::RVec<int> &plane_hits_y) {
             ROOT::RVec<bool> mask(scores.size(), false);
             for (std::size_t i = 0; i < scores.size(); ++i) {
                 mask[i] = selection::isMuonCandidate(scores[i], llr[i], lengths[i], dists[i], gens[i], start_x[i],
