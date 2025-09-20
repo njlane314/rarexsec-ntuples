@@ -17,6 +17,6 @@ class TruthChannelProcessor : public EventProcessorStage {
     ROOT::RDF::RNode assignChannelDefinitions(ROOT::RDF::RNode df) const;
 };
 
-} // namespace proc
+}
 
 #endif

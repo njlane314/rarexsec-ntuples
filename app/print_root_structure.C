@@ -100,7 +100,7 @@ void printDirectory(TDirectory *directory, int depth) {
     }
 }
 
-} // namespace
+}
 
 void print_root_structure(const char *file_name) {
     if (!file_name || file_name[0] == '\0') {

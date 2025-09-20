@@ -30,6 +30,6 @@ class RunConfig {
     json samples_;
 };
 
-} // namespace proc
+}
 
 #endif // RUN_CONFIG_H

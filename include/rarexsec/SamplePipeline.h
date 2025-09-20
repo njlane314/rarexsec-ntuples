@@ -51,6 +51,6 @@ class SamplePipeline {
                                    const nlohmann::json &all_samples_json);
 };
 
-} // namespace proc
+}
 
 #endif

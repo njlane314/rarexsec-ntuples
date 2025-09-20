@@ -7,6 +7,6 @@ namespace proc {
 
 FilterExpression muonNeutrinoChargedCurrentSelection();
 
-} // namespace proc
+}
 
 #endif

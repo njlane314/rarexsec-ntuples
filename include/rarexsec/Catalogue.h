@@ -131,6 +131,6 @@ ROOT::RVec<T> filterByMask(const ROOT::RVec<T> &values, const ROOT::RVec<bool> &
     return transformByMask(values, mask, Identity{});
 }
 
-} // namespace proc
+}
 
 #endif

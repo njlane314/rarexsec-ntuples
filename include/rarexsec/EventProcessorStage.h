@@ -21,6 +21,6 @@ class EventProcessorStage {
     std::unique_ptr<EventProcessorStage> next_;
 };
 
-} // namespace proc
+}
 
 #endif

@@ -38,7 +38,7 @@ ROOT::RDF::RNode applyExclusionKeys(ROOT::RDF::RNode df, const std::vector<std::
     return df;
 }
 
-} // namespace
+}
 
 SamplePipeline::SamplePipeline(const nlohmann::json &sample_json, const nlohmann::json &all_samples_json,
                                const std::string &base_dir, const VariableRegistry &var_reg,
@@ -103,4 +103,4 @@ ROOT::RDF::RNode SamplePipeline::makeDataFrame(const std::string &base_dir, cons
     return df;
 }
 
-} // namespace proc
+}

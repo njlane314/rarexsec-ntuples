@@ -85,6 +85,6 @@ inline CommandLineOptions parseArguments(int argc, char **argv) {
     return options;
 }
 
-} // namespace rarexsec::cli
+}
 
 #endif

@@ -18,6 +18,6 @@ class FilterExpression {
     std::string filter_;
 };
 
-} // namespace proc
+}
 
 #endif

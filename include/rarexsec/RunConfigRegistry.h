@@ -26,6 +26,6 @@ class RunConfigRegistry {
     std::optional<std::string> base_directory_;
 };
 
-} // namespace proc
+}
 
 #endif // RUN_CONFIG_REGISTRY_H

@@ -101,7 +101,7 @@ std::string variationTreePath(const proc::SampleKey &base_key, const proc::Varia
            "/events";
 }
 
-} // namespace
+}
 
 namespace proc {
 
@@ -397,4 +397,4 @@ void SnapshotPipelineBuilder::reorganiseSnapshotTrees(const std::string &output_
     file->Write("", TObject::kOverwrite);
 }
 
-} // namespace proc
+}

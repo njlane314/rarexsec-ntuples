@@ -14,6 +14,6 @@ class MuonSelectionProcessor : public EventProcessorStage {
     ROOT::RDF::RNode extractMuonFeatures(ROOT::RDF::RNode df) const;
 };
 
-} // namespace proc
+}
 
 #endif

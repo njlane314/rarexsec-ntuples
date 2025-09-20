@@ -23,4 +23,4 @@ void RunConfigRegistry::setBaseDirectory(std::string base_directory) {
     base_directory_ = std::move(base_directory);
 }
 
-} // namespace proc
+}

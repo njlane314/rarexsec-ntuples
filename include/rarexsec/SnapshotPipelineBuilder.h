@@ -77,6 +77,6 @@ std::unique_ptr<EventProcessorStage> SnapshotPipelineBuilder::chainProcessorStag
     }
 }
 
-} // namespace proc
+}
 
 #endif

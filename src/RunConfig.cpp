@@ -48,4 +48,4 @@ void RunConfig::validate() const {
     }
 }
 
-} // namespace proc
+}

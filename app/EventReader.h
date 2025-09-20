@@ -235,6 +235,6 @@ class EventReader {
     std::unordered_map<std::string, std::size_t> sample_index_;
 };
 
-} // namespace rarexsec::examples
+}
 
 #endif // RAREXSEC_MAIN_EVENTREADER_H
