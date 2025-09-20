@@ -293,9 +293,9 @@ inline std::vector<std::string> resolvePeriods(const proc::RunConfigRegistry &re
 
 inline CommandLineOptions parseArguments(int argc, char **argv) {
     const std::string program = argc > 0 ? argv[0] : "snapshot";
-    const std::string usage =
-        "Usage: " + program +
-        " <config.json> <beam:{numi-fhc|numi-rhc|bnb}> <periods> [additional-periods...] [selection] [output.root]";
+    const std::string usage = "Usage: " + program +
+                              " <config.json> <beam:{numi-fhc|numi-rhc|bnb}> <periods> [additional-periods...] "
+                              "[selection] [output.root]";
 
     if (argc < 4) {
         throw std::invalid_argument(usage);
@@ -343,16 +343,31 @@ inline CommandLineOptions parseArguments(int argc, char **argv) {
         throw std::invalid_argument("The special period 'all' cannot be combined with explicit periods.");
     }
 
-    if (next_arg < argc) {
-        std::string_view selection{argv[next_arg]};
-        if (!selection.empty()) {
-            options.selection = std::string(selection);
+    std::vector<std::string_view> positional;
+    while (next_arg < argc) {
+        std::string_view token{argv[next_arg]};
+
+        if (token.rfind("--", 0) == 0) {
+            throw std::invalid_argument("Unknown option '" + std::string(token) + "'\n" + usage);
         }
+
+        positional.push_back(token);
         ++next_arg;
     }
 
-    if (next_arg < argc) {
-        std::string_view output{argv[next_arg]};
+    if (positional.size() > 2) {
+        throw std::invalid_argument(std::string{"Too many arguments provided\n"} + usage);
+    }
+
+    if (!positional.empty()) {
+        std::string_view selection = positional.front();
+        if (!selection.empty()) {
+            options.selection = std::string(selection);
+        }
+    }
+
+    if (positional.size() == 2) {
+        std::string_view output = positional.back();
         if (!output.empty()) {
             namespace fs = std::filesystem;
             fs::path path{output};
@@ -367,11 +382,6 @@ inline CommandLineOptions parseArguments(int argc, char **argv) {
             }
             options.output = path;
         }
-        ++next_arg;
-    }
-
-    if (next_arg < argc) {
-        throw std::invalid_argument(std::string{"Too many arguments provided\n"} + usage);
     }
 
     return options;
