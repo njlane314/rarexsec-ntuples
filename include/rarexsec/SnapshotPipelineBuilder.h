@@ -14,6 +14,8 @@
 #include <rarexsec/SamplePipeline.h>
 #include <rarexsec/VariableRegistry.h>
 
+class TFile;
+
 namespace proc {
 
 class SnapshotPipelineBuilder {
@@ -63,7 +65,7 @@ class SnapshotPipelineBuilder {
     std::unique_ptr<EventProcessorStage> chainProcessorStages(std::unique_ptr<Head> head,
                                                               std::unique_ptr<Tail>... tail);
 
-    void writeSnapshotMetadata(const std::string &output_file) const;
+    void writeSnapshotMetadata(TFile &output_file) const;
 };
 
 template <typename Head, typename... Tail>
