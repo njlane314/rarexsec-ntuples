@@ -3,7 +3,7 @@
 #include <set>
 #include <utility>
 
-#include <rarexsec/LoggingUtilities.h>
+#include <rarexsec/LoggerUtils.h>
 
 namespace proc {
 
