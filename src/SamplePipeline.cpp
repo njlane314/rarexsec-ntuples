@@ -31,7 +31,8 @@ ROOT::RDF::RNode applyExclusionKeys(ROOT::RDF::RNode df, const std::vector<std::
             }
         }
         if (!found_key) {
-            log::warn("SamplePipeline::applyExclusionKeys", "missing exclusion key", exclusion_key);
+            log::info("SamplePipeline::applyExclusionKeys", "[warning]", "missing exclusion key",
+                      exclusion_key);
         }
     }
     return df;
