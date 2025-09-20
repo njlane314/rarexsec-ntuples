@@ -1,6 +1,6 @@
 #include <rarexsec/SamplePipeline.h>
 
-#include <rarexsec/Logger.h>
+#include <rarexsec/LoggingUtilities.h>
 
 namespace proc {
 namespace {

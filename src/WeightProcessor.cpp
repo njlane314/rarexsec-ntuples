@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-#include <rarexsec/Logger.h>
+#include <rarexsec/LoggingUtilities.h>
 
 namespace proc {
 

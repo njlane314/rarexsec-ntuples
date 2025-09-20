@@ -3,7 +3,7 @@
 #include <fstream>
 #include <stdexcept>
 
-#include <rarexsec/Logger.h>
+#include <rarexsec/LoggingUtilities.h>
 
 namespace proc {
 

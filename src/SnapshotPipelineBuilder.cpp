@@ -10,7 +10,7 @@
 #include <sstream>
 
 #include <rarexsec/BlipProcessor.h>
-#include <rarexsec/Logger.h>
+#include <rarexsec/LoggingUtilities.h>
 #include <rarexsec/MuonSelectionProcessor.h>
 #include <rarexsec/PreselectionProcessor.h>
 #include <rarexsec/ReconstructionProcessor.h>
