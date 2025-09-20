@@ -5,7 +5,7 @@
 ### Makefile shortcuts
 
 ```bash
-make                # configure into ./build and compile the library + runners
+make                # configure into ./build and compile the library + tools
 make install        # install into ./install by default
 make test           # run ctest (a placeholder target is provided)
 make distclean      # remove the ./build directory entirely
@@ -38,7 +38,7 @@ cmake -S . -B build-lib -DRAREXSEC_BUILD_APPS=OFF
 cmake -S . -B build-apps -DRAREXSEC_BUILD_LIB=ON -DRAREXSEC_BUILD_APPS=ON
 ```
 
-`RAREXSEC_BUILD_APPS` requires the processing library because the runners link
+`RAREXSEC_BUILD_APPS` requires the processing library because the tools link
 to `rarexsec::processing`.
 
 The default installation prefix is `./install`. To install into a system prefix
@@ -60,10 +60,10 @@ relative file paths.
 
 ## Run the command-line tools
 
-### Event processing runner
+### Snapshot tool
 
 ```bash
-./build/app/rarexsec-runner/rarexsec-runner \
+./build/app/snapshot/snapshot \
     data/catalogues/samples.json \
     numi \
     run1,run2 \
@@ -80,7 +80,7 @@ relative file paths.
 ### Training pool tool
 
 ```bash
-./build/app/rarexsec-training-pool/rarexsec-training-pool \
+./build/app/training-pool/training-pool \
     data/catalogues/samples.json \
     numi \
     run1,run2 \
@@ -90,7 +90,7 @@ relative file paths.
 
 The training pool command records the event identifiers, weights, truth-channel
 labels, and CNN-friendly image tensors while retaining the same snapshot layout
-as the runner tool.
+as the snapshot tool.
 
 ## Snapshot layout
 
