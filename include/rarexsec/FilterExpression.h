@@ -12,6 +12,7 @@ class FilterExpression {
     explicit FilterExpression(std::string filter) : filter_(std::move(filter)) {}
 
     const std::string &str() const noexcept { return filter_; }
+
     bool empty() const noexcept { return filter_.empty(); }
 
   private:

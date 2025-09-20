@@ -15,7 +15,6 @@ class RunConfigRegistry {
     void addConfig(RunConfig config);
 
     const RunConfig &get(const std::string &beam, const std::string &period) const;
-
     const std::map<std::string, RunConfig> &all() const noexcept { return configs_; }
 
     void setBaseDirectory(std::string base_directory);

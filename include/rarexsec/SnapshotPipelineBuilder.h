@@ -25,8 +25,10 @@ class SnapshotPipelineBuilder {
                             bool blind = true);
 
     SampleFrameMap &getSampleFrames() noexcept { return frames_; }
+
     double getTotalPot() const noexcept { return total_pot_; }
     long getTotalTriggers() const noexcept { return total_triggers_; }
+
     const std::string &getBeam() const noexcept { return beam_; }
     const std::vector<std::string> &getPeriods() const noexcept { return periods_; }
     const RunConfig *getRunConfigForSample(const SampleKey &sk) const;
