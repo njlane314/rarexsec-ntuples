@@ -1,5 +1,5 @@
 #include <rarexsec/PreselectionProcessor.h>
-#include <rarexsec/Catalogue.h>
+#include <rarexsec/SelectionCatalogue.h>
 
 namespace proc {
 
