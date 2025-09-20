@@ -11,7 +11,7 @@
 #include <string_view>
 #include <type_traits>
 
-namespace proc {
+namespace proc::selc {
 
 constexpr float kMinX = 5.f;
 constexpr float kMaxX = 251.f;
@@ -131,6 +131,6 @@ ROOT::RVec<T> filterByMask(const ROOT::RVec<T> &values, const ROOT::RVec<bool> &
     return transformByMask(values, mask, Identity{});
 }
 
-}
+} // namespace proc::selc
 
 #endif
