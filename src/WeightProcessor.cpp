@@ -23,7 +23,14 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
         if (sample_pot_ > 0.0 && total_run_pot_ > 0.0) {
             scale = total_run_pot_ / sample_pot_;
         }
-        proc_df = proc_df.Define("base_event_weight", [scale]() { return scale; });
+        if (proc_df.HasColumn("base_event_weight")) {
+            proc_df = proc_df.Redefine(
+                "base_event_weight",
+                [scale](const auto &weight) { return weight * scale; },
+                {"base_event_weight"});
+        } else {
+            proc_df = proc_df.Define("base_event_weight", [scale]() { return scale; });
+        }
 
         proc_df = proc_df.Define(
             "nominal_event_weight",
@@ -48,7 +55,14 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
         if (sample_triggers_ > 0 && total_run_triggers_ > 0) {
             scale = static_cast<double>(total_run_triggers_) / static_cast<double>(sample_triggers_);
         }
-        proc_df = proc_df.Define("base_event_weight", [scale]() { return scale; });
+        if (proc_df.HasColumn("base_event_weight")) {
+            proc_df = proc_df.Redefine(
+                "base_event_weight",
+                [scale](const auto &weight) { return weight * scale; },
+                {"base_event_weight"});
+        } else {
+            proc_df = proc_df.Define("base_event_weight", [scale]() { return scale; });
+        }
     }
 
     if (!proc_df.HasColumn("nominal_event_weight")) {
