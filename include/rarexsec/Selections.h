@@ -5,7 +5,7 @@
 
 namespace proc {
 
-FilterExpression muonNeutrinoChargedCurrentSelection();
+FilterExpression muNuCCSelection();
 
 }
 
