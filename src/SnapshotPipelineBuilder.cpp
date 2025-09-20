@@ -171,7 +171,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             }
             TDirectory *next = current->GetDirectory(component.c_str());
             if (!next) {
-                next = current->mkdir(component.c_str());
+                next = current->mkdir(component.c_str(), "", /*returnExistingDirectory=*/true);
             }
             if (!next) {
                 log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component", component,
