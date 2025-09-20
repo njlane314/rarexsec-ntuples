@@ -157,10 +157,6 @@ ROOT::RDF::RNode SamplePipeline::makeDataFrame(const std::string &base_dir, cons
     df = applyExclusionKeys(df, descriptor_.truth_exclusions, all_samples_json);
     const auto column_plan = var_reg.columnPlanFor(descriptor_.origin);
     if (!column_plan.required.empty() || !column_plan.optional.empty()) {
-        std::vector<std::string> columns_to_cache;
-        columns_to_cache.reserve(column_plan.required.size() + column_plan.optional.size());
-        std::unordered_set<std::string> cached_columns;
-        cached_columns.reserve(column_plan.required.size() + column_plan.optional.size());
         std::vector<std::string> missing_required;
         missing_required.reserve(column_plan.required.size());
         std::vector<std::string> missing_optional;
@@ -168,11 +164,7 @@ ROOT::RDF::RNode SamplePipeline::makeDataFrame(const std::string &base_dir, cons
 
         auto processColumns = [&](const std::vector<std::string> &columns, std::vector<std::string> &missing) {
             for (const auto &column : columns) {
-                if (df.HasColumn(column)) {
-                    if (cached_columns.insert(column).second) {
-                        columns_to_cache.push_back(column);
-                    }
-                } else {
+                if (!df.HasColumn(column)) {
                     missing.push_back(column);
                 }
             }
@@ -185,10 +177,6 @@ ROOT::RDF::RNode SamplePipeline::makeDataFrame(const std::string &base_dir, cons
                              missing_required);
         reportMissingColumns(sample_key, rel_path, descriptor_.origin, ColumnRequirement::kOptional,
                              missing_optional);
-
-        if (!columns_to_cache.empty()) {
-            df = ROOT::RDF::RNode(df.Cache(columns_to_cache));
-        }
     }
     return df;
 }
