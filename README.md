@@ -51,11 +51,11 @@ The helper script converts an analysis recipe into the catalogue format expected
 by the runners and copies/links the required ntuples:
 
 ```bash
-python config/tools/build-catalogue.py --recipe config/analysis-recipe.json
+python config/tools/build-catalogue.py --recipe config/data/analysis-recipe.json
 ```
 
-The resulting JSON is written to `config/catalogues/samples.json` by default and
-includes the resolved dataset identifiers, POT totals, trigger counts, and
+The resulting JSON is written to `config/data/catalogues/samples.json` by default
+and includes the resolved dataset identifiers, POT totals, trigger counts, and
 relative file paths.
 
 ## Run the command-line tools
@@ -64,7 +64,7 @@ relative file paths.
 
 ```bash
 ./build/app/rarexsec-runner/rarexsec-runner \
-    config/catalogues/samples.json \
+    config/data/catalogues/samples.json \
     numi \
     run1,run2 \
     [optional-selection] \
@@ -81,7 +81,7 @@ relative file paths.
 
 ```bash
 ./build/app/rarexsec-training-pool/rarexsec-training-pool \
-    config/catalogues/samples.json \
+    config/data/catalogues/samples.json \
     numi \
     run1,run2 \
     [optional-selection] \

@@ -22,7 +22,7 @@ DEFAULT_RUN_DB = "/exp/uboone/data/uboonebeam/beamdb/run.db"
 HADD_TMPDIR = Path("/pnfs/uboone/scratch/users/nlane/tmp/") 
 MIN_FREE_GB = 5.0                                        
 DEFAULT_JOBS = min(8, os.cpu_count() or 1)               
-CATALOGUE_SUBDIR = "catalogues"
+CATALOGUE_SUBDIR = Path("data") / "catalogues"
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 
