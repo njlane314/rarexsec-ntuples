@@ -64,7 +64,6 @@ class SnapshotPipelineBuilder {
                                                               std::unique_ptr<Tail>... tail);
 
     void writeSnapshotMetadata(const std::string &output_file) const;
-    void reorganiseSnapshotTrees(const std::string &output_file) const;
 };
 
 template <typename Head, typename... Tail>
