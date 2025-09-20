@@ -1,5 +1,5 @@
 #include <rarexsec/MuonSelectionProcessor.h>
-#include <rarexsec/Catalogue.h>
+#include <rarexsec/SelectionCatalogue.h>
 
 #include <array>
 #include <cmath>
@@ -51,7 +51,9 @@ ROOT::RDF::RNode defineMaskedColumn(ROOT::RDF::RNode node, std::string_view alia
 }
 
 ROOT::RVec<float> computeMaskedCosTheta(const ROOT::RVec<float> &theta, const ROOT::RVec<bool> &mask) {
-    return transformByMask(theta, mask, [](float angle) { return static_cast<float>(std::cos(angle)); });
+    return transformByMask(theta, mask, [](float angle) {
+        return static_cast<float>(std::cos(angle));
+    });
 }
 
 } // namespace
