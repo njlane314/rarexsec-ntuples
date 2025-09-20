@@ -1,12 +1,12 @@
-#ifndef LOGGING_LOGGER_H
-#define LOGGING_LOGGER_H
+#ifndef RAREXSEC_LOGGER_H
+#define RAREXSEC_LOGGER_H
 
 #include <chrono>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -33,31 +33,35 @@ inline std::string timestamp() {
     return oss.str();
 }
 
-inline std::string join_message() {
-    return {};
-}
-
-template <typename First, typename... Rest>
-inline std::string join_message(First &&first, Rest &&...rest) {
-    std::ostringstream oss;
-    oss << std::forward<First>(first);
-    if constexpr (sizeof...(rest) > 0) {
-        oss << ' ' << join_message(std::forward<Rest>(rest)...);
+template <typename... Args>
+inline std::string format_message(Args &&...args) {
+    if constexpr (sizeof...(Args) == 0) {
+        return {};
+    } else {
+        std::ostringstream oss;
+        bool first = true;
+        auto append = [&](auto &&value) {
+            if (!first) {
+                oss << ' ';
+            }
+            first = false;
+            oss << std::forward<decltype(value)>(value);
+        };
+        (append(std::forward<Args>(args)), ...);
+        return oss.str();
     }
-    return oss.str();
 }
 
 template <typename... Args>
 inline void write(std::ostream &os, Args &&...args) {
     std::lock_guard<std::mutex> lock(log_mutex());
-    os << '[' << timestamp() << "] " << join_message(std::forward<Args>(args)...) << std::endl;
+    os << '[' << timestamp() << "] ";
+    if constexpr (sizeof...(Args) > 0) {
+        os << format_message(std::forward<Args>(args)...);
+    }
+    os << std::endl;
 }
 
-}
-
-template <typename... Args>
-inline void debug(Args &&...args) {
-    detail::write(std::clog, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
@@ -66,15 +70,9 @@ inline void info(Args &&...args) {
 }
 
 template <typename... Args>
-inline void warn(Args &&...args) {
-    detail::write(std::clog, std::forward<Args>(args)...);
-}
-
-template <typename... Args>
 [[noreturn]] inline void fatal(Args &&...args) {
-    std::string msg = detail::join_message(std::forward<Args>(args)...);
-    detail::write(std::clog, msg);
-    throw std::runtime_error(msg);
+    detail::write(std::clog, std::forward<Args>(args)...);
+    std::terminate();
 }
 
 }

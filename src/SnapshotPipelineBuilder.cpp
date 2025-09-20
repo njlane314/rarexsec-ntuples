@@ -155,7 +155,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     }
 
     if (first) {
-        log::warn("SnapshotPipelineBuilder::snapshot", "No samples were written to", output_file);
+        log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "No samples were written to", output_file);
         return;
     }
 
@@ -169,12 +169,13 @@ void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std:
 }
 
 void SnapshotPipelineBuilder::printAllBranches() const {
-    log::debug("SnapshotPipelineBuilder::printAllBranches", "Available branches in loaded samples");
+    log::info("SnapshotPipelineBuilder::printAllBranches", "[debug]",
+              "Available branches in loaded samples");
     for (auto &[sample_key, sample_def] : frames_) {
-        log::debug("SnapshotPipelineBuilder::printAllBranches", "Sample", sample_key.str());
+        log::info("SnapshotPipelineBuilder::printAllBranches", "[debug]", "Sample", sample_key.str());
         auto branches = sample_def.nominalNode().GetColumnNames();
         for (const auto &branch : branches) {
-            log::debug("SnapshotPipelineBuilder::printAllBranches", branch);
+            log::info("SnapshotPipelineBuilder::printAllBranches", "[debug]", branch);
         }
     }
 }
@@ -356,8 +357,8 @@ void SnapshotPipelineBuilder::reorganiseSnapshotTrees(const std::string &output_
         TTree *tree = nullptr;
         file->GetObject(tree_name.c_str(), tree);
         if (!tree) {
-            log::warn("SnapshotPipelineBuilder::reorganiseSnapshotTrees", "Could not locate snapshot tree",
-                      tree_name);
+            log::info("SnapshotPipelineBuilder::reorganiseSnapshotTrees", "[warning]",
+                      "Could not locate snapshot tree", tree_name);
             return;
         }
 

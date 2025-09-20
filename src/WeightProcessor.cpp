@@ -12,7 +12,7 @@ WeightProcessor::WeightProcessor(const nlohmann::json &cfg, double total_run_pot
       total_run_pot_(total_run_pot),
       total_run_triggers_(total_run_triggers) {
     if (sample_pot_ <= 0.0 && sample_triggers_ <= 0L) {
-        log::warn("WeightProcessor::WeightProcessor", "sample has no scaling information");
+        log::info("WeightProcessor::WeightProcessor", "[warning]", "sample has no scaling information");
     }
 }
 

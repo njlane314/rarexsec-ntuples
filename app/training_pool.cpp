@@ -84,7 +84,7 @@ std::vector<std::string> filterAvailableColumns(const proc::SnapshotPipelineBuil
         if (present_everywhere) {
             available.push_back(column);
         } else {
-            proc::log::warn("rarexsec-training-pool", "Omitting column", column,
+            proc::log::info("rarexsec-training-pool", "[warning]", "Omitting column", column,
                             "because it is not available for every dataset");
         }
     }
