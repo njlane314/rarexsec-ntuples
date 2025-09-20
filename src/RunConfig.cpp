@@ -17,11 +17,9 @@ RunConfig::RunConfig(const json &j, std::string beam_mode, std::string run_perio
       samples_(j.at("samples")) {}
 
 const std::string &RunConfig::beamMode() const noexcept { return beam_mode_; }
-
 const std::string &RunConfig::runPeriod() const noexcept { return run_period_; }
 
 double RunConfig::nominalPot() const noexcept { return nominal_pot_; }
-
 long RunConfig::nominalTriggers() const noexcept { return nominal_triggers_; }
 
 const RunConfig::json &RunConfig::sampleConfigs() const noexcept { return samples_; }

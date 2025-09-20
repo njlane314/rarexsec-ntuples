@@ -15,8 +15,10 @@ class RunConfig {
 
     const std::string &beamMode() const noexcept;
     const std::string &runPeriod() const noexcept;
+
     double nominalPot() const noexcept;
     long nominalTriggers() const noexcept;
+
     const json &sampleConfigs() const noexcept;
 
     std::string label() const;

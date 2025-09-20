@@ -31,12 +31,16 @@ class SamplePipeline {
     SampleOrigin sampleOrigin() const noexcept { return descriptor_.origin; }
     const std::string &relativePath() const noexcept { return descriptor_.relative_path; }
     const std::string &stageName() const noexcept { return descriptor_.stage_name; }
+
     const std::string &truthFilter() const noexcept { return descriptor_.truth_filter; }
     const std::vector<std::string> &truthExclusions() const noexcept { return descriptor_.truth_exclusions; }
+
     double pot() const noexcept { return descriptor_.pot; }
     long triggers() const noexcept { return descriptor_.triggers; }
+
     const SampleDescriptor &descriptor() const noexcept { return descriptor_; }
     const std::vector<VariationDescriptor> &variationDescriptors() const noexcept { return descriptor_.variations; }
+
     ROOT::RDF::RNode nominalNode() const { return nominal_node_; }
     const std::map<SampleVariation, ROOT::RDF::RNode> &variationNodes() const noexcept { return variation_nodes_; }
 
