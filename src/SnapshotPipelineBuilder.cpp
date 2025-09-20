@@ -259,7 +259,6 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_fi
     std::string sample_key_value;
     std::string beam;
     std::string run_period;
-    std::string dataset_id;
     std::string relative_path;
     std::string variation_label;
     std::string stage_name;
@@ -271,7 +270,6 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_fi
     samples_tree.Branch("sample_key", &sample_key_value);
     samples_tree.Branch("beam", &beam);
     samples_tree.Branch("run_period", &run_period);
-    samples_tree.Branch("dataset_id", &dataset_id);
     samples_tree.Branch("relative_path", &relative_path);
     samples_tree.Branch("variation", &variation_label);
     samples_tree.Branch("stage_name", &stage_name);
@@ -289,7 +287,6 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_fi
         run_period = sample_period;
         tree_path = nominalTreePath(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
         sample_key_value = key.str();
-        dataset_id = sample.datasetId();
         relative_path = sample.relativePath();
         variation_label = "nominal";
         stage_name = sample_stage;
@@ -308,7 +305,6 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(const std::string &output_fi
             tree_path = variationTreePath(key, variation_def, variation_beam, variation_period,
                                           sample.sampleOrigin(), variation_stage);
             sample_key_value = variation_def.sample_key.str();
-            dataset_id = variation_def.dataset_id;
             relative_path = variation_def.relative_path;
             variation_label = variation_def.variation_label.empty() ? variationToKey(variation_def.variation)
                                                                     : variation_def.variation_label;

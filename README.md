@@ -55,7 +55,7 @@ python config/tools/build-catalogue.py --recipe config/analysis-recipe.json
 ```
 
 The resulting JSON is written to `config/catalogues/samples.json` by default and
-includes the resolved dataset identifiers, POT totals, trigger counts, and
+includes the POT totals, trigger counts, and
 relative file paths.
 
 ## Run the command-line tools
@@ -121,7 +121,7 @@ snapshot.root
   variation advertises a processing stage name.
 - `meta/totals` stores the integrated POT and trigger counts across all samples.
 - `meta/samples` lists each nominal and detector-variation dataset together with
-  the resolved `tree_path`, dataset identifier, beam, and run period.
+  the resolved `tree_path`, beam, and run period.
 
 ## Explore snapshot metadata with ROOT
 

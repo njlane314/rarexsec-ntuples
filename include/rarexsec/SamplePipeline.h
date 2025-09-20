@@ -30,7 +30,6 @@ class SamplePipeline {
     const SampleKey &sampleKey() const noexcept { return descriptor_.sample_key; }
     SampleOrigin sampleOrigin() const noexcept { return descriptor_.origin; }
     const std::string &relativePath() const noexcept { return descriptor_.relative_path; }
-    const std::string &datasetId() const noexcept { return descriptor_.dataset_id; }
     const std::string &stageName() const noexcept { return descriptor_.stage_name; }
     const std::string &truthFilter() const noexcept { return descriptor_.truth_filter; }
     const std::vector<std::string> &truthExclusions() const noexcept { return descriptor_.truth_exclusions; }

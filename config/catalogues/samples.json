@@ -1,8 +1,4 @@
 {
-    "role": "catalogue",
-    "schema_version": "1.0",
-    "produced_at": "2025-09-11T23:11:40+00:00",
-    "source_recipe_path": "config/analysis-recipe.json",
     "samples": {
         "ntupledir": "/exp/uboone/data/users/nlane/ntuples",
         "beamlines": {
@@ -20,12 +16,10 @@
                                 {
                                     "sample_key": "mc_inclusive_run1_fhc_detvar_cv",
                                     "variation_type": "cv",
-                                    "dataset_id": "numi.fhc.r1.mc.inc.sel-beam.cv",
                                     "relative_path": "mc_inclusive_run1_fhc_detvar_cv.root",
                                     "pot": 3.0470412137616795e+20
                                 }
                             ],
-                            "dataset_id": "numi.fhc.r1.mc.inc.sel-beam",
                             "relative_path": "mc_inclusive_run1_fhc.root",
                             "pot": 1.3308774439702065e+21
                         },
@@ -37,12 +31,10 @@
                                 {
                                     "sample_key": "mc_strangeness_run1_fhc_detvar_cv",
                                     "variation_type": "cv",
-                                    "dataset_id": "numi.fhc.r1.mc.strange.sel-strange.cv",
                                     "relative_path": "mc_strangeness_run1_fhc_detvar_cv.root",
                                     "pot": 3.0470412137616795e+20
                                 }
                             ],
-                            "dataset_id": "numi.fhc.r1.mc.strange.sel-strange",
                             "relative_path": "mc_strangeness_run1_fhc.root",
                             "pot": 1.4322894271958414e+23
                         }
@@ -56,7 +48,6 @@
                         {
                             "sample_key": "numi_ext_run1",
                             "sample_type": "ext",
-                            "dataset_id": "numi.ext.r1.ext.inc.sel-ext",
                             "relative_path": "numi_ext_run1.root",
                             "pot": 0.0,
                             "triggers": 19565379

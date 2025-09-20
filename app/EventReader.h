@@ -31,7 +31,6 @@ struct SampleMetadata {
     std::string tree_name;
     std::string beam;
     std::string run_period;
-    std::string dataset_id;
     std::string relative_path;
     std::string variation;
     std::string stage;
@@ -204,7 +203,6 @@ class EventReader {
             TTreeReaderValue<std::string> tree_name(samples_reader, "tree_name");
             TTreeReaderValue<std::string> beam(samples_reader, "beam");
             TTreeReaderValue<std::string> run_period(samples_reader, "run_period");
-            TTreeReaderValue<std::string> dataset_id(samples_reader, "dataset_id");
             TTreeReaderValue<std::string> relative_path(samples_reader, "relative_path");
             TTreeReaderValue<std::string> variation(samples_reader, "variation");
             TTreeReaderValue<std::string> stage_name(samples_reader, "stage_name");
@@ -215,8 +213,8 @@ class EventReader {
             std::vector<SampleMetadata> samples;
             samples.reserve(static_cast<std::size_t>(samples_tree->GetEntries()));
             while (samples_reader.Next()) {
-                samples.push_back(SampleMetadata{*tree_name,   *beam,      *run_period, *dataset_id, *relative_path,
-                                                 *variation, *stage_name, *origin,     *sample_pot,
+                samples.push_back(SampleMetadata{*tree_name, *beam, *run_period, *relative_path, *variation,
+                                                 *stage_name, *origin, *sample_pot,
                                                  static_cast<long>(*sample_triggers)});
             }
 
