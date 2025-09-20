@@ -5,9 +5,11 @@
 #include "TROOT.h"
 #include "TTree.h"
 #include "TObject.h"
+#include "TKey.h"
 #include "ROOT/RDataFrame.hxx"
 
 #include <cctype>
+#include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -360,6 +362,63 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
     }
 
+    auto relocateTreeToDirectory = [&](TDirectory *target_directory, const std::string &directory_path) {
+        if (!target_directory) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Target directory pointer unexpectedly null for",
+                       directory_path, "in", output_file);
+        }
+
+        TFile *file = target_directory->GetFile();
+        if (!file) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Target directory", directory_path,
+                       "is not associated with an output file for", output_file);
+        }
+
+        const std::string tree_name{kEventsTreeName};
+        const std::string tree_path = directory_path + '/' + tree_name;
+
+        target_directory->ReadKeys();
+        if (target_directory->GetKey(tree_name.c_str())) {
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Tree already present at", tree_path,
+                      "- skipping relocation");
+            return;
+        }
+
+        file->cd();
+        file->ReadKeys();
+        TKey *tree_key = file->GetKey(tree_name.c_str());
+        if (!tree_key) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Could not locate tree", tree_name,
+                       "in root directory when relocating to", tree_path, "in", output_file);
+        }
+
+        std::unique_ptr<TObject> tree_holder(tree_key->ReadObj());
+        if (!tree_holder) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to load tree object", tree_name,
+                       "from", output_file, "for relocation to", tree_path);
+        }
+
+        if (!tree_holder->InheritsFrom(TTree::Class())) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Object", tree_name,
+                       "in output file root directory is not a TTree (", tree_holder->ClassName(),
+                       ") when relocating to", tree_path);
+        }
+
+        auto *tree = static_cast<TTree *>(tree_holder.get());
+
+        target_directory->cd();
+        tree->SetDirectory(target_directory);
+        if (tree->Write(tree->GetName(), TObject::kOverwrite) == 0) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to write tree", tree_name, "to", tree_path,
+                       "in", output_file);
+        }
+
+        file->cd();
+        const std::string delete_pattern = std::string(tree_name) + ";*";
+        file->Delete(delete_pattern.c_str());
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Relocated tree to", tree_path);
+    };
+
     auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::string &directory_path) {
         auto dir_it = directory_lookup.find(directory_path);
         if (dir_it == directory_lookup.end()) {
@@ -381,7 +440,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                   directory_path + '/' + kEventsTreeName, "to", output_file);
         auto tree_opts = opts;
         df.Snapshot(kEventsTreeName, output_file, *snapshot_columns, tree_opts);
-        relocateTreeToDirectory(directory_path);
+        relocateTreeToDirectory(dir_it->second, directory_path);
         wrote_anything = true;
         ++processed_trees;
         log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/', total_trees,
