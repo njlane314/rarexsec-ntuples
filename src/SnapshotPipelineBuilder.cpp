@@ -47,6 +47,47 @@ using SnapshotResultPtr = ROOT::RDF::RResultPtr<ROOT::RDF::RInterface<ROOT::Deta
 constexpr bool kSnapshotOptionsHaveDirName = HasDirNameOption<ROOT::RDF::RSnapshotOptions>::value;
 constexpr bool kSnapshotResultHasHandle = HasGetHandle<SnapshotResultPtr>::value;
 
+template <typename Options, bool HasDirName = HasDirNameOption<Options>::value>
+struct SnapshotDirectorySetter {
+    static void set(Options &, const std::string &) {}
+};
+
+template <typename Options>
+struct SnapshotDirectorySetter<Options, true> {
+    static void set(Options &options, const std::string &directory) { options.fDirName = directory; }
+};
+
+template <typename ResultPtr, bool HasHandle = HasGetHandle<ResultPtr>::value>
+struct SnapshotHandleCollector {
+    static void collect(ResultPtr &, std::vector<ROOT::RDF::RResultHandle> &) {}
+};
+
+template <typename ResultPtr>
+struct SnapshotHandleCollector<ResultPtr, true> {
+    static void collect(ResultPtr &result, std::vector<ROOT::RDF::RResultHandle> &handles) {
+        handles.push_back(result.GetHandle());
+    }
+};
+
+template <typename ResultPtr, bool HasHandle = HasGetHandle<ResultPtr>::value>
+struct SnapshotJobExecutor;
+
+template <typename ResultPtr>
+struct SnapshotJobExecutor<ResultPtr, true> {
+    static void run(std::vector<ResultPtr> &, std::vector<ROOT::RDF::RResultHandle> &handles) {
+        ROOT::RDF::RunGraphs(handles);
+    }
+};
+
+template <typename ResultPtr>
+struct SnapshotJobExecutor<ResultPtr, false> {
+    static void run(std::vector<ResultPtr> &results, std::vector<ROOT::RDF::RResultHandle> &) {
+        for (auto &result : results) {
+            result.GetValue();
+        }
+    }
+};
+
 class ImplicitMTGuard {
   public:
     ImplicitMTGuard() : was_enabled_{ROOT::IsImplicitMTEnabled()} {
@@ -425,15 +466,11 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduling tree", tree_path, "to",
                   target_directory->GetPath());
-        if constexpr (kSnapshotOptionsHaveDirName) {
-            tree_opts.fDirName = directory_path;
-        }
+        SnapshotDirectorySetter<ROOT::RDF::RSnapshotOptions>::set(tree_opts, directory_path);
 
         auto result = df.Snapshot(snapshot_tree_name, output_file, *snapshot_columns, tree_opts);
 
-        if constexpr (kSnapshotResultHasHandle) {
-            job_handles.push_back(result.GetHandle());
-        }
+        SnapshotHandleCollector<SnapshotResultPtr>::collect(result, job_handles);
         snapshot_results.push_back(std::move(result));
         scheduled_snapshot_directories.push_back(directory_components);
         scheduled_tree_paths.push_back(tree_path);
@@ -471,14 +508,12 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         if constexpr (kSnapshotResultHasHandle) {
             log::info("SnapshotPipelineBuilder::snapshot", "Executing", job_handles.size(),
                       "snapshot jobs with ROOT::RDF::RunGraphs");
-            ROOT::RDF::RunGraphs(job_handles);
         } else {
             log::info("SnapshotPipelineBuilder::snapshot", "Executing", snapshot_results.size(),
                       "snapshot jobs sequentially");
-            for (auto &result : snapshot_results) {
-                result.GetValue();
-            }
         }
+
+        SnapshotJobExecutor<SnapshotResultPtr>::run(snapshot_results, job_handles);
 
         for (std::size_t i = 0; i < scheduled_tree_paths.size(); ++i) {
             const auto &components = scheduled_snapshot_directories[i];
