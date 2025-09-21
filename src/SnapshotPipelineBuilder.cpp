@@ -12,8 +12,10 @@
 #include <cctype>
 #include <memory>
 #include <sstream>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include <rarexsec/BlipProcessor.h>
 #include <rarexsec/LoggerUtils.h>
@@ -27,6 +29,23 @@
 namespace {
 
 constexpr char kEventsTreeName[] = "events";
+
+template <typename T, typename = void>
+struct HasDirNameOption : std::false_type {};
+
+template <typename T>
+struct HasDirNameOption<T, std::void_t<decltype(std::declval<T &>().fDirName)>> : std::true_type {};
+
+template <typename T, typename = void>
+struct HasGetHandle : std::false_type {};
+
+template <typename T>
+struct HasGetHandle<T, std::void_t<decltype(std::declval<T &>().GetHandle())>> : std::true_type {};
+
+using SnapshotResultPtr = ROOT::RDF::RResultPtr<ROOT::RDF::RInterface<ROOT::Detail::RDF::RLoopManager>>;
+
+constexpr bool kSnapshotOptionsHaveDirName = HasDirNameOption<ROOT::RDF::RSnapshotOptions>::value;
+constexpr bool kSnapshotResultHasHandle = HasGetHandle<SnapshotResultPtr>::value;
 
 class ImplicitMTGuard {
   public:
@@ -369,7 +388,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     scheduled_snapshot_directories.reserve(total_trees);
     std::vector<std::string> scheduled_tree_paths;
     scheduled_tree_paths.reserve(total_trees);
-    std::vector<ROOT::RDF::RResultPtr<ROOT::RDF::RInterface<ROOT::Detail::RDF::RLoopManager>>> snapshot_results;
+    std::vector<SnapshotResultPtr> snapshot_results;
     snapshot_results.reserve(total_trees);
     std::vector<ROOT::RDF::RResultHandle> job_handles;
     job_handles.reserve(total_trees);
@@ -382,6 +401,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         const std::string directory_path = componentsToPath(directory_components);
         const std::string tree_path = directory_path + '/' + kEventsTreeName;
+        const std::string snapshot_tree_name =
+            kSnapshotOptionsHaveDirName ? std::string{kEventsTreeName} : tree_path;
 
         if (!filter_expr.empty()) {
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to", tree_path);
@@ -404,11 +425,15 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduling tree", tree_path, "to",
                   target_directory->GetPath());
-        tree_opts.fDirName = directory_path;
+        if constexpr (kSnapshotOptionsHaveDirName) {
+            tree_opts.fDirName = directory_path;
+        }
 
-        auto result = df.Snapshot(kEventsTreeName, output_file, *snapshot_columns, tree_opts);
+        auto result = df.Snapshot(snapshot_tree_name, output_file, *snapshot_columns, tree_opts);
 
-        job_handles.push_back(result.GetHandle());
+        if constexpr (kSnapshotResultHasHandle) {
+            job_handles.push_back(result.GetHandle());
+        }
         snapshot_results.push_back(std::move(result));
         scheduled_snapshot_directories.push_back(directory_components);
         scheduled_tree_paths.push_back(tree_path);
@@ -442,10 +467,18 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
     }
 
-    if (!job_handles.empty()) {
-        log::info("SnapshotPipelineBuilder::snapshot", "Executing", job_handles.size(),
-                  "snapshot jobs with ROOT::RDF::RunGraphs");
-        ROOT::RDF::RunGraphs(job_handles);
+    if (!snapshot_results.empty()) {
+        if constexpr (kSnapshotResultHasHandle) {
+            log::info("SnapshotPipelineBuilder::snapshot", "Executing", job_handles.size(),
+                      "snapshot jobs with ROOT::RDF::RunGraphs");
+            ROOT::RDF::RunGraphs(job_handles);
+        } else {
+            log::info("SnapshotPipelineBuilder::snapshot", "Executing", snapshot_results.size(),
+                      "snapshot jobs sequentially");
+            for (auto &result : snapshot_results) {
+                result.GetValue();
+            }
+        }
 
         for (std::size_t i = 0; i < scheduled_tree_paths.size(); ++i) {
             const auto &components = scheduled_snapshot_directories[i];
