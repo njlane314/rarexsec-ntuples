@@ -444,6 +444,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         directory_lookup.reserve(directories_to_create.size() * 4 + 1);
         directory_lookup.emplace("", output_handle.get());
+
+        for (const auto &components : directories_to_create) {
+            getOrCreateDirectory(*output_handle, directory_lookup, components, output_file);
+        }
     } else {
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
                   "No directories requested during initialisation for", output_file);
@@ -479,7 +483,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             df = df.Filter(filter_expr);
         }
 
-        TDirectory *target_directory = findDirectory(*output_handle, directory_lookup, directory_components);
+        TDirectory *target_directory =
+            getOrCreateDirectory(*output_handle, directory_lookup, directory_components, output_file);
         if (target_directory) {
             target_directory->cd();
             target_directory->ReadKeys();
