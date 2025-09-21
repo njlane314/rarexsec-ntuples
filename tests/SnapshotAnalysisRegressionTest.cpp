@@ -1,3 +1,4 @@
+#include "TDirectory.h"
 #include "TFile.h"
 #include "TTree.h"
 
@@ -17,6 +18,8 @@
 #include <nlohmann/json.hpp>
 
 namespace {
+
+constexpr char kEventsTreeName[] = "events";
 
 struct SampleExpectation {
     std::string period;
@@ -288,18 +291,32 @@ RunResult executeSnapshot(const std::filesystem::path &executable,
 }
 
 long readTreeEntries(const std::filesystem::path &output_path, const SampleExpectation &expectation) {
-    const std::string tree_path = "samples/test-beam/" + expectation.period +
-                                  "/ext/selection_ext/" + expectation.sample_key + "/nominal/events";
+    const std::string directory_path = "samples/test-beam/" + expectation.period + "/ext/selection_ext/" +
+                                       expectation.sample_key + "/nominal";
+    const std::string tree_path = directory_path + '/' + kEventsTreeName;
 
     std::unique_ptr<TFile> file{TFile::Open(output_path.c_str(), "READ")};
     if (!file || file->IsZombie()) {
         throw std::runtime_error("Failed to open snapshot output file");
     }
 
-    TTree *tree = dynamic_cast<TTree *>(file->Get(tree_path.c_str()));
+    ensure(file->Get(kEventsTreeName) == nullptr, "Unexpected events tree present in output root directory");
+
+    TDirectory *directory = file->GetDirectory(directory_path.c_str());
+    ensure(directory != nullptr, "Missing directory for expected tree path: " + directory_path);
+
+    TTree *tree = dynamic_cast<TTree *>(directory->Get(kEventsTreeName));
     if (!tree) {
         throw std::runtime_error("Expected tree missing at path: " + tree_path);
     }
+
+    ensure(tree->GetDirectory() != nullptr, "Tree directory pointer was null for: " + tree_path);
+    const std::string directory_recorded = tree->GetDirectory()->GetPath();
+    const std::string expected_suffix = ":/" + directory_path;
+    ensure(directory_recorded.size() >= expected_suffix.size() &&
+               directory_recorded.compare(directory_recorded.size() - expected_suffix.size(), expected_suffix.size(),
+                                         expected_suffix) == 0,
+           "Tree recorded directory path mismatch for " + tree_path + ": " + directory_recorded);
 
     return tree->GetEntries();
 }

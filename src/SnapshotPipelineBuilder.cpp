@@ -27,6 +27,33 @@ namespace {
 
 constexpr char kEventsTreeName[] = "events";
 
+inline bool snapshotIntoDirectoryImpl(...) { return false; }
+
+template <typename RNodeT>
+auto snapshotIntoDirectoryImpl(long, RNodeT &df, const char *tree_name, TDirectory &directory,
+                               const std::vector<std::string> &columns,
+                               const ROOT::RDF::RSnapshotOptions &opts)
+    -> decltype(df.Snapshot(tree_name, &directory, columns, opts), bool()) {
+    df.Snapshot(tree_name, &directory, columns, opts);
+    return true;
+}
+
+template <typename RNodeT>
+auto snapshotIntoDirectoryImpl(int, RNodeT &df, const char *tree_name, TDirectory &directory,
+                               const std::vector<std::string> &columns,
+                               const ROOT::RDF::RSnapshotOptions &opts)
+    -> decltype(df.Snapshot(tree_name, directory, columns, opts), bool()) {
+    df.Snapshot(tree_name, directory, columns, opts);
+    return true;
+}
+
+template <typename RNodeT>
+bool snapshotIntoDirectory(RNodeT &df, const char *tree_name, TDirectory &directory,
+                           const std::vector<std::string> &columns,
+                           const ROOT::RDF::RSnapshotOptions &opts) {
+    return snapshotIntoDirectoryImpl(0, df, tree_name, directory, columns, opts);
+}
+
 class ImplicitMTGuard {
   public:
     ImplicitMTGuard() : was_enabled_{ROOT::IsImplicitMTEnabled()} {
@@ -281,86 +308,115 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         delete ptr;
     };
 
-    if (!directories_to_create.empty()) {
-        {
-            ImplicitMTGuard imt_guard;
-            std::unique_ptr<TFile, decltype(file_deleter)> output_handle(
-                TFile::Open(output_file.c_str(), "RECREATE"), file_deleter);
-            if (!output_handle || output_handle->IsZombie()) {
-                log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
-                           "with mode", "RECREATE");
+    std::unique_ptr<TFile, decltype(file_deleter)> output_handle(nullptr, file_deleter);
+    std::unordered_map<std::string, TDirectory *> directory_lookup;
+
+    auto get_or_create_directory = [&](const std::vector<std::string> &components, bool log_details) {
+        if (!output_handle) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Output file handle is not initialised when ensuring",
+                       componentsToPath(components));
+        }
+
+        if (directory_lookup.empty()) {
+            directory_lookup.emplace("", output_handle.get());
+        }
+
+        TDirectory *current = output_handle.get();
+        const std::string directory_path = componentsToPath(components);
+        if (log_details) {
+            if (components.empty()) {
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Ensuring root directory for",
+                          output_file);
+            } else {
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Ensuring directory path", directory_path);
+            }
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting at directory",
+                      current->GetPath());
+        }
+
+        std::string current_path;
+        current_path.reserve(directory_path.size());
+        for (const auto &component : components) {
+            if (component.empty()) {
+                continue;
             }
 
+            if (!current_path.empty()) {
+                current_path.push_back('/');
+            }
+            current_path += component;
+
+            auto lookup_it = directory_lookup.find(current_path);
+            if (lookup_it != directory_lookup.end()) {
+                current = lookup_it->second;
+                if (log_details) {
+                    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Reusing cached directory",
+                              current->GetPath());
+                }
+                continue;
+            }
+
+            if (log_details) {
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Processing component", component,
+                          "under", current->GetPath());
+            }
+
+            TDirectory *next = current->GetDirectory(component.c_str());
+            if (!next) {
+                if (TObject *existing = current->Get(component.c_str())) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot",
+                               "Existing object with requested name detected", existing->GetName(), "of type",
+                               existing->ClassName(), "under", current->GetPath());
+                }
+                if (log_details) {
+                    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
+                              "under", current->GetPath());
+                }
+                next = current->mkdir(component.c_str());
+                if (!next) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component",
+                               component, "in", output_file);
+                }
+            } else if (log_details) {
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Reusing existing directory", component,
+                          "under", current->GetPath());
+            }
+
+            current = next;
+            directory_lookup.emplace(current_path, current);
+
+            if (log_details) {
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Now at directory", current->GetPath());
+            }
+        }
+
+        return current;
+    };
+
+    {
+        ImplicitMTGuard imt_guard;
+        output_handle.reset(TFile::Open(output_file.c_str(), "RECREATE"));
+        if (!output_handle || output_handle->IsZombie()) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
+                       "with mode", "RECREATE");
+        }
+
+        directory_lookup.reserve(directories_to_create.size() * 4 + 1);
+        directory_lookup.emplace("", output_handle.get());
+
+        if (!directories_to_create.empty()) {
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Initialising", directories_to_create.size(),
                       "directory paths in", output_file);
-
-            std::unordered_map<std::string, TDirectory *> directory_lookup;
-            directory_lookup.reserve(directories_to_create.size() * 4 + 1);
-            directory_lookup.emplace("", output_handle.get());
-
             for (const auto &components : directories_to_create) {
                 if (components.empty()) {
                     continue;
                 }
-
-                const std::string directory_path = componentsToPath(components);
-                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Ensuring directory path", directory_path);
-                TDirectory *current = output_handle.get();
-                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting at directory",
-                          current->GetPath());
-                std::string current_path;
-
-                for (const auto &component : components) {
-                    if (component.empty()) {
-                        continue;
-                    }
-
-                    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Processing component", component,
-                              "under", current->GetPath());
-
-                    if (!current_path.empty()) {
-                        current_path.push_back('/');
-                    }
-                    current_path += component;
-
-                    auto lookup_it = directory_lookup.find(current_path);
-                    if (lookup_it != directory_lookup.end()) {
-                        current = lookup_it->second;
-                        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Reusing existing directory",
-                                  component, "under", current->GetPath());
-                    } else {
-                        TDirectory *next = current->GetDirectory(component.c_str());
-                        if (!next) {
-                            if (TObject *existing = current->Get(component.c_str())) {
-                                log::fatal("SnapshotPipelineBuilder::snapshot",
-                                           "Existing object with requested name detected", existing->GetName(),
-                                           "of type", existing->ClassName(), "under", current->GetPath());
-                            }
-                            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
-                                      "under", current->GetPath());
-                            next = current->mkdir(component.c_str());
-                            if (!next) {
-                                log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component",
-                                           component, "in", output_file);
-                            }
-                        } else {
-                            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Reusing existing directory",
-                                      component, "under", current->GetPath());
-                        }
-                        current = next;
-                        directory_lookup.emplace(current_path, current);
-                    }
-
-                    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Now at directory",
-                              current->GetPath());
-                }
+                get_or_create_directory(components, true);
             }
-            // Explicitly release the file so that no TFile handle remains open when snapshotting begins.
-            output_handle.reset();
+        } else {
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
+                      "No directories requested during initialisation for", output_file);
         }
-    } else {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
-                  "No directories requested during initialisation for", output_file);
     }
 
     std::size_t processed_trees = 0;
@@ -368,100 +424,13 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
     }
 
-    auto relocateTreeToDirectory = [&](const std::vector<std::string> &directory_components) {
-        const std::string directory_path = componentsToPath(directory_components);
-        ImplicitMTGuard imt_guard;
-        std::unique_ptr<TFile, decltype(file_deleter)> file_handle(TFile::Open(output_file.c_str(), "UPDATE"),
-                                                                   file_deleter);
-        if (!file_handle || file_handle->IsZombie()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen snapshot output", output_file,
-                       "with mode", "UPDATE");
-        }
-
-        TDirectory *current = file_handle.get();
-        std::string current_path;
-        for (const auto &component : directory_components) {
-            if (component.empty()) {
-                continue;
-            }
-
-            current->ReadKeys();
-            TDirectory *next = current->GetDirectory(component.c_str());
-            if (!next) {
-                if (TObject *existing = current->Get(component.c_str())) {
-                    log::fatal("SnapshotPipelineBuilder::snapshot",
-                               "Existing object with requested name detected", existing->GetName(),
-                               "of type", existing->ClassName(), "under", current->GetPath());
-                }
-                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
-                          "under", current->GetPath());
-                next = current->mkdir(component.c_str());
-                if (!next) {
-                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component", component,
-                               "in", output_file);
-                }
-            }
-            current = next;
-
-            if (!current_path.empty()) {
-                current_path.push_back('/');
-            }
-            current_path += component;
-        }
-
-        TDirectory *target_directory = current;
-        if (!target_directory) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Target directory pointer unexpectedly null for",
-                       directory_path, "in", output_file);
-        }
-
-        const std::string tree_name{kEventsTreeName};
-        const std::string tree_path = directory_path + '/' + tree_name;
-
-        target_directory->ReadKeys();
-        if (target_directory->GetKey(tree_name.c_str())) {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Tree already present at", tree_path,
-                      "- skipping relocation");
-            return;
-        }
-
-        file_handle->cd();
-        file_handle->ReadKeys();
-        TKey *tree_key = file_handle->GetKey(tree_name.c_str());
-        if (!tree_key) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Could not locate tree", tree_name,
-                       "in root directory when relocating to", tree_path, "in", output_file);
-        }
-
-        std::unique_ptr<TObject> tree_holder(tree_key->ReadObj());
-        if (!tree_holder) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to load tree object", tree_name,
-                       "from", output_file, "for relocation to", tree_path);
-        }
-
-        if (!tree_holder->InheritsFrom(TTree::Class())) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Object", tree_name,
-                       "in output file root directory is not a TTree (", tree_holder->ClassName(),
-                       ") when relocating to", tree_path);
-        }
-
-        auto *tree = static_cast<TTree *>(tree_holder.get());
-
-        target_directory->cd();
-        tree->SetDirectory(target_directory);
-        if (tree->Write(tree->GetName(), TObject::kOverwrite) == 0) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to write tree", tree_name, "to", tree_path,
-                       "in", output_file);
-        }
-
-        file_handle->cd();
-        const std::string delete_pattern = std::string(tree_name) + ";*";
-        file_handle->Delete(delete_pattern.c_str());
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Relocated tree to", tree_path);
-    };
-
     auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::vector<std::string> &directory_components) {
         const std::string directory_path = componentsToPath(directory_components);
+        TDirectory *target_directory = get_or_create_directory(directory_components, false);
+        if (!target_directory) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to resolve directory", directory_path,
+                       "in", output_file);
+        }
 
         if (!filter_expr.empty()) {
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to",
@@ -471,8 +440,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Writing tree",
                   directory_path + '/' + kEventsTreeName, "to", output_file);
         auto tree_opts = opts;
-        df.Snapshot(kEventsTreeName, output_file, *snapshot_columns, tree_opts);
-        relocateTreeToDirectory(directory_components);
+        if (!snapshotIntoDirectory(df, kEventsTreeName, *target_directory, *snapshot_columns, tree_opts)) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "This ROOT build does not support snapshotting directly",
+                       "into", directory_path, "within", output_file);
+        }
         wrote_anything = true;
         ++processed_trees;
         log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/', total_trees,
@@ -514,14 +485,11 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
     {
         ImplicitMTGuard imt_guard;
-        std::unique_ptr<TFile, decltype(file_deleter)> metadata_handle(TFile::Open(output_file.c_str(), "UPDATE"),
-                                                                       file_deleter);
-        if (!metadata_handle || metadata_handle->IsZombie()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen snapshot output", output_file,
-                       "with mode", "UPDATE");
+        if (!output_handle) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Output file handle was unexpectedly released before",
+                       "writing metadata to", output_file);
         }
-
-        this->writeSnapshotMetadata(*metadata_handle);
+        this->writeSnapshotMetadata(*output_handle);
     }
 }
 
