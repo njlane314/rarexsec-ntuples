@@ -67,7 +67,13 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
 
     if (!proc_df.HasColumn("nominal_event_weight")) {
         if (proc_df.HasColumn("base_event_weight")) {
-            proc_df = proc_df.Alias("nominal_event_weight", "base_event_weight");
+            // Use Define instead of Alias so that both columns can be materialised
+            // simultaneously in downstream snapshots without ROOT considering them
+            // duplicated requests for the same source branch.
+            proc_df = proc_df.Define(
+                "nominal_event_weight",
+                [](double weight) { return weight; },
+                {"base_event_weight"});
         } else {
             proc_df = proc_df.Define("nominal_event_weight", []() { return 1.0; });
         }
