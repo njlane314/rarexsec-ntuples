@@ -7,6 +7,7 @@
 #include "TObject.h"
 #include "TKey.h"
 #include "ROOT/RDataFrame.hxx"
+#include "ROOT/RDFHelpers.hxx"
 
 #include <cctype>
 #include <memory>
@@ -275,12 +276,12 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
     std::vector<std::vector<std::string>> directories_to_create;
     directories_to_create.reserve(frames_.size());
-    std::unordered_set<std::string> scheduled_directories;
-    scheduled_directories.reserve(frames_.size());
+    std::unordered_set<std::string> scheduled_directory_paths;
+    scheduled_directory_paths.reserve(frames_.size());
 
     auto schedule_directory = [&](std::vector<std::string> components, std::string description) {
         const std::string directory_path = componentsToPath(components);
-        if (scheduled_directories.insert(directory_path).second) {
+        if (scheduled_directory_paths.insert(directory_path).second) {
             log::info("SnapshotPipelineBuilder::snapshot", "[debug]", std::move(description), directory_path);
             directories_to_create.push_back(std::move(components));
         } else {
@@ -364,12 +365,14 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
     }
 
-    std::vector<std::vector<std::string>> scheduled_directories;
-    scheduled_directories.reserve(total_trees);
+    std::vector<std::vector<std::string>> scheduled_snapshot_directories;
+    scheduled_snapshot_directories.reserve(total_trees);
     std::vector<std::string> scheduled_tree_paths;
     scheduled_tree_paths.reserve(total_trees);
-    std::vector<ROOT::RDF::RResultPtr<void>> job_results;
-    job_results.reserve(total_trees);
+    std::vector<ROOT::RDF::RResultPtr<ROOT::RDF::RInterface<ROOT::Detail::RDF::RLoopManager>>> snapshot_results;
+    snapshot_results.reserve(total_trees);
+    std::vector<ROOT::RDF::RResultHandle> job_handles;
+    job_handles.reserve(total_trees);
 
     auto schedule_snapshot = [&](ROOT::RDF::RNode df, const std::vector<std::string> &directory_components) {
         if (!output_handle) {
@@ -401,10 +404,13 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduling tree", tree_path, "to",
                   target_directory->GetPath());
-        auto result = df.Snapshot(kEventsTreeName, target_directory, *snapshot_columns, tree_opts);
+        tree_opts.fDirName = directory_path;
 
-        job_results.push_back(result);
-        scheduled_directories.push_back(directory_components);
+        auto result = df.Snapshot(kEventsTreeName, output_file, *snapshot_columns, tree_opts);
+
+        job_handles.push_back(result.GetHandle());
+        snapshot_results.push_back(std::move(result));
+        scheduled_snapshot_directories.push_back(directory_components);
         scheduled_tree_paths.push_back(tree_path);
     };
 
@@ -436,13 +442,13 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
     }
 
-    if (!job_results.empty()) {
-        log::info("SnapshotPipelineBuilder::snapshot", "Executing", job_results.size(),
+    if (!job_handles.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "Executing", job_handles.size(),
                   "snapshot jobs with ROOT::RDF::RunGraphs");
-        ROOT::RDF::RunGraphs(job_results);
+        ROOT::RDF::RunGraphs(job_handles);
 
         for (std::size_t i = 0; i < scheduled_tree_paths.size(); ++i) {
-            const auto &components = scheduled_directories[i];
+            const auto &components = scheduled_snapshot_directories[i];
             const std::string &tree_path = scheduled_tree_paths[i];
             TDirectory *target_directory =
                 getOrCreateDirectory(*output_handle, directory_lookup, components, output_file);
