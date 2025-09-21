@@ -9,7 +9,9 @@
 #include "ROOT/RDataFrame.hxx"
 
 #include <cctype>
+#include <filesystem>
 #include <memory>
+#include <system_error>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -46,6 +48,13 @@ class ImplicitMTGuard {
 
   private:
     bool was_enabled_;
+};
+
+struct SnapshotJob {
+    std::vector<std::string> directory_components;
+    std::string tree_path;
+    std::filesystem::path sink_path;
+    ROOT::RDF::RResultPtr<void> result;
 };
 
 std::string sanitiseComponent(std::string value) {
@@ -137,6 +146,59 @@ std::string componentsToPath(const std::vector<std::string> &components) {
     return os.str();
 }
 
+std::filesystem::path makeSnapshotSinkPath(const std::string &tree_path, std::size_t job_index) {
+    namespace fs = std::filesystem;
+
+    const fs::path temp_dir = fs::temp_directory_path();
+    const std::string sanitised = sanitiseComponent(tree_path);
+
+    for (std::size_t suffix = 0;; ++suffix) {
+        std::ostringstream os;
+        os << "rarexsec_snapshot_" << job_index << '_' << sanitised;
+        if (suffix != 0) {
+            os << '_' << suffix;
+        }
+        os << ".root";
+
+        const fs::path candidate = temp_dir / os.str();
+        if (!fs::exists(candidate)) {
+            return candidate;
+        }
+    }
+}
+
+TDirectory *ensureDirectoryChain(TFile &output_file, const std::vector<std::string> &components,
+                                 const std::string &output_file_path) {
+    TDirectory *current = &output_file;
+
+    for (const auto &component : components) {
+        if (component.empty()) {
+            continue;
+        }
+
+        current->ReadKeys();
+        TDirectory *next = current->GetDirectory(component.c_str());
+        if (!next) {
+            if (TObject *existing = current->Get(component.c_str())) {
+                proc::log::fatal("SnapshotPipelineBuilder::snapshot",
+                                 "Existing object with requested name detected", existing->GetName(), "of type",
+                                 existing->ClassName(), "under", current->GetPath());
+            }
+            proc::log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
+                            "under", current->GetPath());
+            next = current->mkdir(component.c_str());
+            if (!next) {
+                proc::log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component",
+                                 component, "in", output_file_path);
+            }
+        }
+
+        current = next;
+    }
+
+    return current;
+}
+
 std::string nominalTreePath(const proc::SampleKey &sample_key, const std::string &beam, const std::string &period,
                             proc::SampleOrigin origin, const std::string &stage_name) {
     return componentsToPath(nominalDirectoryComponents(sample_key, beam, period, origin, stage_name)) + "/events";
@@ -180,8 +242,6 @@ const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey 
 void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
                                        const std::vector<std::string> &columns) const {
     bool wrote_anything = false;
-    ROOT::RDF::RSnapshotOptions opts;
-    opts.fMode = "UPDATE";
 
     log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting snapshot over", frames_.size(),
               "samples to", output_file);
@@ -368,115 +428,38 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
     }
 
-    auto relocateTreeToDirectory = [&](const std::vector<std::string> &directory_components) {
+    std::vector<SnapshotJob> jobs;
+    jobs.reserve(total_trees);
+    std::vector<ROOT::RDF::RResultPtr<void>> job_results;
+    job_results.reserve(total_trees);
+
+    std::size_t job_index = 0;
+
+    auto schedule_snapshot = [&](ROOT::RDF::RNode df, const std::vector<std::string> &directory_components) {
         const std::string directory_path = componentsToPath(directory_components);
-        ImplicitMTGuard imt_guard;
-        std::unique_ptr<TFile, decltype(file_deleter)> file_handle(TFile::Open(output_file.c_str(), "UPDATE"),
-                                                                   file_deleter);
-        if (!file_handle || file_handle->IsZombie()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen snapshot output", output_file,
-                       "with mode", "UPDATE");
-        }
-
-        TDirectory *current = file_handle.get();
-        std::string current_path;
-        for (const auto &component : directory_components) {
-            if (component.empty()) {
-                continue;
-            }
-
-            current->ReadKeys();
-            TDirectory *next = current->GetDirectory(component.c_str());
-            if (!next) {
-                if (TObject *existing = current->Get(component.c_str())) {
-                    log::fatal("SnapshotPipelineBuilder::snapshot",
-                               "Existing object with requested name detected", existing->GetName(),
-                               "of type", existing->ClassName(), "under", current->GetPath());
-                }
-                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
-                          "under", current->GetPath());
-                next = current->mkdir(component.c_str());
-                if (!next) {
-                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component", component,
-                               "in", output_file);
-                }
-            }
-            current = next;
-
-            if (!current_path.empty()) {
-                current_path.push_back('/');
-            }
-            current_path += component;
-        }
-
-        TDirectory *target_directory = current;
-        if (!target_directory) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Target directory pointer unexpectedly null for",
-                       directory_path, "in", output_file);
-        }
-
-        const std::string tree_name{kEventsTreeName};
-        const std::string tree_path = directory_path + '/' + tree_name;
-
-        target_directory->ReadKeys();
-        if (target_directory->GetKey(tree_name.c_str())) {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Tree already present at", tree_path,
-                      "- skipping relocation");
-            return;
-        }
-
-        file_handle->cd();
-        file_handle->ReadKeys();
-        TKey *tree_key = file_handle->GetKey(tree_name.c_str());
-        if (!tree_key) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Could not locate tree", tree_name,
-                       "in root directory when relocating to", tree_path, "in", output_file);
-        }
-
-        std::unique_ptr<TObject> tree_holder(tree_key->ReadObj());
-        if (!tree_holder) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to load tree object", tree_name,
-                       "from", output_file, "for relocation to", tree_path);
-        }
-
-        if (!tree_holder->InheritsFrom(TTree::Class())) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Object", tree_name,
-                       "in output file root directory is not a TTree (", tree_holder->ClassName(),
-                       ") when relocating to", tree_path);
-        }
-
-        auto *tree = static_cast<TTree *>(tree_holder.get());
-
-        target_directory->cd();
-        tree->SetDirectory(target_directory);
-        if (tree->Write(tree->GetName(), TObject::kOverwrite) == 0) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to write tree", tree_name, "to", tree_path,
-                       "in", output_file);
-        }
-
-        file_handle->cd();
-        const std::string delete_pattern = std::string(tree_name) + ";*";
-        file_handle->Delete(delete_pattern.c_str());
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Relocated tree to", tree_path);
-    };
-
-    auto snapshot_tree = [&](ROOT::RDF::RNode df, const std::vector<std::string> &directory_components) {
-        const std::string directory_path = componentsToPath(directory_components);
+        const std::string tree_path = directory_path + '/' + kEventsTreeName;
 
         if (!filter_expr.empty()) {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to",
-                      directory_path + '/' + kEventsTreeName);
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to", tree_path);
             df = df.Filter(filter_expr);
         }
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Writing tree",
-                  directory_path + '/' + kEventsTreeName, "to", output_file);
-        auto tree_opts = opts;
-        df.Snapshot(kEventsTreeName, output_file, *snapshot_columns, tree_opts);
-        relocateTreeToDirectory(directory_components);
-        wrote_anything = true;
-        ++processed_trees;
-        log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/', total_trees,
-                  "trees -", directory_path + '/' + kEventsTreeName);
+
+        SnapshotJob job;
+        job.directory_components = directory_components;
+        job.tree_path = tree_path;
+        job.sink_path = makeSnapshotSinkPath(tree_path, job_index++);
+        const std::string sink_file = job.sink_path.string();
+
+        ROOT::RDF::RSnapshotOptions tree_opts;
+        tree_opts.fMode = "RECREATE";
+        tree_opts.fLazy = true;
+
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduling tree", tree_path, "to temporary sink",
+                  sink_file);
+        job.result = df.Snapshot(kEventsTreeName, sink_file, *snapshot_columns, tree_opts);
+
+        job_results.push_back(job.result);
+        jobs.push_back(std::move(job));
     };
 
     for (auto const &[key, sample] : frames_) {
@@ -487,7 +470,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         const auto nominal_directory_components =
             nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
-        snapshot_tree(sample.nominalNode(), nominal_directory_components);
+        schedule_snapshot(sample.nominalNode(), nominal_directory_components);
         const auto &variation_nodes = sample.variationNodes();
         for (const auto &variation_def : sample.variationDescriptors()) {
             auto it = variation_nodes.find(variation_def.variation);
@@ -503,7 +486,91 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const auto variation_directory_components =
                 variationDirectoryComponents(key, variation_def, variation_beam, variation_period,
                                              sample.sampleOrigin(), variation_stage);
-            snapshot_tree(it->second, variation_directory_components);
+            schedule_snapshot(it->second, variation_directory_components);
+        }
+    }
+
+    if (!job_results.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "Executing", job_results.size(),
+                  "snapshot jobs with ROOT::RDF::RunGraphs");
+        ROOT::RDF::RunGraphs(job_results);
+    } else {
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No snapshot jobs were scheduled");
+    }
+
+    auto read_file_deleter = [](TFile *ptr) {
+        if (!ptr) {
+            return;
+        }
+        ptr->Close();
+        delete ptr;
+    };
+
+    if (!jobs.empty()) {
+        {
+            ImplicitMTGuard imt_guard;
+            std::unique_ptr<TFile, decltype(file_deleter)> output_handle(TFile::Open(output_file.c_str(), "UPDATE"),
+                                                                         file_deleter);
+            if (!output_handle || output_handle->IsZombie()) {
+                log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen snapshot output", output_file,
+                           "with mode", "UPDATE");
+            }
+
+            for (const auto &job : jobs) {
+                const std::string sink_path = job.sink_path.string();
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Importing tree from", sink_path, "into",
+                          job.tree_path);
+
+                std::unique_ptr<TFile, decltype(read_file_deleter)> sink_handle(
+                    TFile::Open(sink_path.c_str(), "READ"), read_file_deleter);
+                if (!sink_handle || sink_handle->IsZombie()) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open temporary snapshot sink",
+                               sink_path);
+                }
+
+                TTree *tree = nullptr;
+                sink_handle->GetObject(kEventsTreeName, tree);
+                if (!tree) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot", "Could not locate tree", kEventsTreeName,
+                               "in temporary sink", sink_path);
+                }
+
+                TDirectory *target_directory = ensureDirectoryChain(*output_handle, job.directory_components, output_file);
+                target_directory->ReadKeys();
+                if (target_directory->GetKey(kEventsTreeName)) {
+                    const std::string delete_pattern = std::string(kEventsTreeName) + ";*";
+                    target_directory->Delete(delete_pattern.c_str());
+                }
+
+                target_directory->cd();
+                std::unique_ptr<TTree> cloned_tree(tree->CloneTree(-1, "fast"));
+                if (!cloned_tree) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to clone tree", kEventsTreeName, "from",
+                               sink_path, "for", job.tree_path);
+                }
+                if (cloned_tree->Write(kEventsTreeName, TObject::kOverwrite) == 0) {
+                    log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to write tree", kEventsTreeName, "to",
+                               job.tree_path, "in", output_file);
+                }
+
+                wrote_anything = true;
+                ++processed_trees;
+                log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/',
+                          total_trees, "trees -", job.tree_path);
+            }
+        }
+
+        for (const auto &job : jobs) {
+            if (job.sink_path.empty()) {
+                continue;
+            }
+            std::error_code removal_error;
+            std::filesystem::remove(job.sink_path, removal_error);
+            if (removal_error) {
+                log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                          "Failed to remove temporary snapshot sink", job.sink_path.string(), '-',
+                          removal_error.message());
+            }
         }
     }
 

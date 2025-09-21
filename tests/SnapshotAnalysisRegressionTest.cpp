@@ -345,6 +345,12 @@ int main(int argc, char **argv) {
             baseline_entries.push_back(readTreeEntries(output_path, expectation));
         }
 
+        ensure(expectations.size() >= 2, "Regression test requires at least two samples to validate RunGraphs execution");
+        ensure(baseline_entries.size() >= 2,
+               "Unexpected baseline entry count while validating multi-job RunGraphs execution");
+        ensure(baseline_entries[0] > 0, "First sample produced no entries after RunGraphs execution");
+        ensure(baseline_entries[1] > 0, "Second sample produced no entries after RunGraphs execution");
+
         const auto second_result = executeSnapshot(snapshot_executable, config_path, period_argument, output_path);
         ensure(second_result.exit_code == 0, "Second snapshot-analysis invocation failed");
 
