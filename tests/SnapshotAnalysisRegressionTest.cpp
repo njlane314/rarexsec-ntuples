@@ -1,3 +1,4 @@
+#include "TDirectory.h"
 #include "TFile.h"
 #include "TTree.h"
 
@@ -10,8 +11,10 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -26,6 +29,118 @@ struct SampleExpectation {
 struct RunResult {
     int exit_code{0};
     double seconds{0.0};
+};
+
+class ScopedEnvVar {
+  public:
+    ScopedEnvVar(std::string name, std::string value) : name_(std::move(name)), value_(std::move(value)) {
+        const char *existing = std::getenv(name_.c_str());
+        if (existing) {
+            had_previous_ = true;
+            previous_value_ = existing;
+        }
+        if (setenv(name_.c_str(), value_.c_str(), 1) != 0) {
+            throw std::runtime_error("Failed to set environment variable " + name_);
+        }
+    }
+
+    ScopedEnvVar(const ScopedEnvVar &) = delete;
+    ScopedEnvVar &operator=(const ScopedEnvVar &) = delete;
+
+    ScopedEnvVar(ScopedEnvVar &&other) noexcept
+        : name_(std::move(other.name_)), value_(std::move(other.value_)), previous_value_(std::move(other.previous_value_)),
+          had_previous_(other.had_previous_) {
+        other.had_previous_ = false;
+    }
+
+    ScopedEnvVar &operator=(ScopedEnvVar &&other) noexcept {
+        if (this != &other) {
+            this->restore();
+            name_ = std::move(other.name_);
+            value_ = std::move(other.value_);
+            previous_value_ = std::move(other.previous_value_);
+            had_previous_ = other.had_previous_;
+            other.had_previous_ = false;
+        }
+        return *this;
+    }
+
+    ~ScopedEnvVar() { restore(); }
+
+  private:
+    void restore() {
+        if (name_.empty()) {
+            return;
+        }
+        if (had_previous_) {
+            setenv(name_.c_str(), previous_value_.c_str(), 1);
+        } else {
+            unsetenv(name_.c_str());
+        }
+        had_previous_ = false;
+    }
+
+    std::string name_;
+    std::string value_;
+    std::string previous_value_;
+    bool had_previous_{false};
+};
+
+class ScopedDirectoryPermissions {
+  public:
+    ScopedDirectoryPermissions(const std::filesystem::path &path, std::filesystem::perms desired)
+        : path_(path), original_permissions_(std::filesystem::status(path).permissions()) {
+        std::filesystem::permissions(path_, desired, std::filesystem::perm_options::replace);
+    }
+
+    ScopedDirectoryPermissions(const ScopedDirectoryPermissions &) = delete;
+    ScopedDirectoryPermissions &operator=(const ScopedDirectoryPermissions &) = delete;
+
+    ScopedDirectoryPermissions(ScopedDirectoryPermissions &&other) noexcept
+        : path_(std::move(other.path_)), original_permissions_(other.original_permissions_), active_(other.active_) {
+        other.active_ = false;
+    }
+
+    ScopedDirectoryPermissions &operator=(ScopedDirectoryPermissions &&other) noexcept {
+        if (this != &other) {
+            this->restore();
+            path_ = std::move(other.path_);
+            original_permissions_ = other.original_permissions_;
+            active_ = other.active_;
+            other.active_ = false;
+        }
+        return *this;
+    }
+
+    ~ScopedDirectoryPermissions() { restore(); }
+
+  private:
+    void restore() {
+        if (!active_) {
+            return;
+        }
+        std::error_code ec;
+        std::filesystem::permissions(path_, original_permissions_, std::filesystem::perm_options::replace, ec);
+        active_ = false;
+    }
+
+    std::filesystem::path path_;
+    std::filesystem::perms original_permissions_;
+    bool active_{true};
+};
+
+class SnapshotEnvironmentGuard {
+  public:
+    explicit SnapshotEnvironmentGuard(const std::filesystem::path &blocked_tmp)
+        : permission_guard_(blocked_tmp, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec),
+          tmpdir_guard_("TMPDIR", blocked_tmp.string()), tmp_guard_("TMP", blocked_tmp.string()),
+          temp_guard_("TEMP", blocked_tmp.string()) {}
+
+  private:
+    ScopedDirectoryPermissions permission_guard_;
+    ScopedEnvVar tmpdir_guard_;
+    ScopedEnvVar tmp_guard_;
+    ScopedEnvVar temp_guard_;
 };
 
 std::filesystem::path makeTemporaryDirectory() {
@@ -301,6 +416,30 @@ long readTreeEntries(const std::filesystem::path &output_path, const SampleExpec
         throw std::runtime_error("Expected tree missing at path: " + tree_path);
     }
 
+    TDirectory *tree_directory = tree->GetDirectory();
+    if (!tree_directory) {
+        throw std::runtime_error("Tree at " + tree_path + " is not associated with any directory");
+    }
+
+    if (tree_directory == file.get()) {
+        throw std::runtime_error("Tree at " + tree_path + " was materialised in the file root instead of a directory");
+    }
+
+    const std::string expected_directory = "samples/test-beam/" + expectation.period +
+                                           "/ext/selection_ext/" + expectation.sample_key + "/nominal";
+    const std::string directory_path = tree_directory->GetPath();
+    const std::string expected_suffix = '/' + expected_directory;
+    if (directory_path.rfind(expected_suffix) == std::string::npos) {
+        throw std::runtime_error("Tree for " + expectation.sample_key + " landed in unexpected directory " +
+                                 directory_path + ", expected suffix " + expected_suffix);
+    }
+
+    TTree *root_tree = nullptr;
+    file->GetObject("events", root_tree);
+    if (root_tree && root_tree != tree) {
+        throw std::runtime_error("Unexpected duplicate events tree detected at the file root");
+    }
+
     return tree->GetEntries();
 }
 
@@ -323,6 +462,10 @@ int main(int argc, char **argv) {
         constexpr int kSamplesPerRun = 8;
 
         const auto temp_dir = makeTemporaryDirectory();
+        const auto blocked_tmp = temp_dir / "blocked-tmp";
+        std::filesystem::create_directories(blocked_tmp);
+        SnapshotEnvironmentGuard environment_guard(blocked_tmp);
+
         const auto ntuple_dir = temp_dir / "ntuples";
         std::filesystem::create_directories(ntuple_dir);
 
