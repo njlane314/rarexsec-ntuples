@@ -198,9 +198,48 @@ std::string componentsToPath(const std::vector<std::string> &components) {
     return os.str();
 }
 
+TDirectory *findDirectory(TDirectory &root_directory,
+                          std::unordered_map<std::string, TDirectory *> &directory_lookup,
+                          const std::vector<std::string> &components) {
+    TDirectory *current = &root_directory;
+    std::string current_path;
+
+    for (const auto &component : components) {
+        if (component.empty()) {
+            continue;
+        }
+
+        if (!current_path.empty()) {
+            current_path.push_back('/');
+        }
+        current_path += component;
+
+        auto lookup_it = directory_lookup.find(current_path);
+        if (lookup_it != directory_lookup.end()) {
+            current = lookup_it->second;
+            continue;
+        }
+
+        current->ReadKeys();
+        TDirectory *next = current->GetDirectory(component.c_str());
+        if (!next) {
+            return nullptr;
+        }
+
+        current = next;
+        directory_lookup.emplace(current_path, current);
+    }
+
+    return current;
+}
+
 TDirectory *getOrCreateDirectory(TDirectory &root_directory,
                                  std::unordered_map<std::string, TDirectory *> &directory_lookup,
                                  const std::vector<std::string> &components, const std::string &output_file_path) {
+    if (auto *existing = findDirectory(root_directory, directory_lookup, components)) {
+        return existing;
+    }
+
     TDirectory *current = &root_directory;
     std::string current_path;
 
@@ -400,21 +439,11 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                        "with mode", "RECREATE");
         }
 
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Initialising", directories_to_create.size(),
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Prepared to populate", directories_to_create.size(),
                   "directory paths in", output_file);
 
         directory_lookup.reserve(directories_to_create.size() * 4 + 1);
         directory_lookup.emplace("", output_handle.get());
-
-        for (const auto &components : directories_to_create) {
-            if (components.empty()) {
-                continue;
-            }
-
-            const std::string directory_path = componentsToPath(components);
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Ensuring directory path", directory_path);
-            getOrCreateDirectory(*output_handle, directory_lookup, components, output_file);
-        }
     } else {
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
                   "No directories requested during initialisation for", output_file);
@@ -450,22 +479,24 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             df = df.Filter(filter_expr);
         }
 
-        TDirectory *target_directory =
-            getOrCreateDirectory(*output_handle, directory_lookup, directory_components, output_file);
-        target_directory->cd();
-        target_directory->ReadKeys();
-        if (target_directory->GetKey(kEventsTreeName)) {
-            const std::string delete_pattern = std::string(kEventsTreeName) + ";*";
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Removing existing tree from", tree_path);
-            target_directory->Delete(delete_pattern.c_str());
+        TDirectory *target_directory = findDirectory(*output_handle, directory_lookup, directory_components);
+        if (target_directory) {
+            target_directory->cd();
+            target_directory->ReadKeys();
+            if (target_directory->GetKey(kEventsTreeName)) {
+                const std::string delete_pattern = std::string(kEventsTreeName) + ";*";
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Removing existing tree from", tree_path);
+                target_directory->Delete(delete_pattern.c_str());
+            }
         }
 
         ROOT::RDF::RSnapshotOptions tree_opts;
         tree_opts.fMode = "RECREATE";
         tree_opts.fLazy = true;
 
+        const std::string target_path = output_file + ":/" + directory_path;
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduling tree", tree_path, "to",
-                  target_directory->GetPath());
+                  target_directory ? target_directory->GetPath() : target_path);
         SnapshotDirectorySetter<ROOT::RDF::RSnapshotOptions>::set(tree_opts, directory_path);
 
         auto result = df.Snapshot(snapshot_tree_name, output_file, *snapshot_columns, tree_opts);
@@ -518,8 +549,13 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         for (std::size_t i = 0; i < scheduled_tree_paths.size(); ++i) {
             const auto &components = scheduled_snapshot_directories[i];
             const std::string &tree_path = scheduled_tree_paths[i];
-            TDirectory *target_directory =
-                getOrCreateDirectory(*output_handle, directory_lookup, components, output_file);
+            TDirectory *target_directory = findDirectory(*output_handle, directory_lookup, components);
+            if (!target_directory) {
+                log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                          "Expected directory missing after snapshot at", tree_path);
+                continue;
+            }
+
             target_directory->ReadKeys();
             if (target_directory->GetKey(kEventsTreeName)) {
                 ++processed_trees;
@@ -527,8 +563,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                 log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/',
                           total_trees, "trees -", tree_path);
             } else {
-                log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "Expected tree missing after snapshot at",
-                          tree_path);
+                log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                          "Expected tree missing after snapshot at", tree_path);
             }
         }
     } else {
