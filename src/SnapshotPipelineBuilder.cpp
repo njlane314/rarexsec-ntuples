@@ -7,7 +7,6 @@
 #include "TObject.h"
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
-#include "ROOT/RVersion.hxx"
 
 #include <algorithm>
 #include <cctype>
