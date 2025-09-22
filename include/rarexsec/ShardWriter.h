@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include <Compression.h>
+
 #include "ROOT/RDataFrame.hxx"
 
 #include <rarexsec/HubCatalog.h>
@@ -21,7 +23,7 @@ class ShardWriter {
               compression_level(3) {}
 
         std::filesystem::path output_dir;
-        int compression_algo;
+        ROOT::ECompressionAlgorithm compression_algo;
         int compression_level;
     };
 
