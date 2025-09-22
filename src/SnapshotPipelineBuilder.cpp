@@ -2,6 +2,7 @@
 
 #include "TDirectory.h"
 #include "TFile.h"
+#include "TFileMerger.h"
 #include "TROOT.h"
 #include "TTree.h"
 #include "TObject.h"
@@ -413,18 +414,6 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                        "origin_id",      "event_uid",    "rsub_key",   "base_sel",   "w_nom",
                        "is_mc",          "is_nominal",   "sampvar_uid", "sample_pot", "sample_triggers"});
 
-    ROOT::RDF::RSnapshotOptions base_opt;
-    base_opt.fMode = "RECREATE";
-    base_opt.fLazy = false;
-    base_opt.fCompressionAlgorithm = ROOT::kLZ4;
-    base_opt.fCompressionLevel = 1;
-    if constexpr (snapshot_detail::has_autoflush_v<ROOT::RDF::RSnapshotOptions>) {
-        base_opt.fAutoFlush = 100000;
-    }
-    if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
-        base_opt.fOverwriteIfExists = true;
-    }
-
     // Per-(sample, variation) results, one dataframe per node
     using SnapshotResultHandle = decltype(std::declval<ROOT::RDF::RNode>().Snapshot(
         std::declval<std::string>(), std::declval<std::string>(),
@@ -434,10 +423,16 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         CutflowRow row;
         SnapshotResultHandle snapshot;
         ROOT::RDF::RResultPtr<ULong64_t> n_total;
-        ROOT::RDF::RResultPtr<ULong64_t> n_base;
+        ROOT::RDF::RResultPtr<double> sum_base;
     };
     std::vector<CountHandles> counts;
     counts.reserve(combos.size());
+    std::vector<std::string> part_files;
+    part_files.reserve(combos.size());
+
+    std::string temp_dir = output_file + ".tmp";
+    gSystem->mkdir(temp_dir.c_str(), true);
+
     for (std::size_t idx = 0; idx < combos.size(); ++idx) {
         auto &c = combos[idx];
 
@@ -455,15 +450,26 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         ch.row.stage = std::move(c.stage);
         ch.row.origin = std::move(c.origin);
 
-        ROOT::RDF::RSnapshotOptions opt = base_opt;
-        if (idx > 0) {
-            opt.fMode = "UPDATE";
+        auto &node = nodes[idx];
+        ch.n_total = node.Count();
+        ch.sum_base = node.Sum<double>("base_sel");
+
+        std::string part_file = temp_dir + "/part_" + std::to_string(idx) + ".root";
+        part_files.emplace_back(part_file);
+
+        ROOT::RDF::RSnapshotOptions opt;
+        opt.fMode = "RECREATE";
+        opt.fLazy = true;
+        opt.fCompressionAlgorithm = ROOT::kLZ4;
+        opt.fCompressionLevel = 1;
+        if constexpr (snapshot_detail::has_autoflush_v<ROOT::RDF::RSnapshotOptions>) {
+            opt.fAutoFlush = -30000000;
+        }
+        if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
+            opt.fOverwriteIfExists = true;
         }
 
-        auto &node = nodes[idx];
-        ch.snapshot = node.Snapshot("events", output_file, final_cols, opt);
-        ch.n_total = node.Count();
-        ch.n_base = node.Sum<ULong64_t>("base_sel");
+        ch.snapshot = node.Snapshot("events", part_file, final_cols, opt);
         counts.emplace_back(std::move(ch));
     }
 
@@ -485,7 +491,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                       "- sample", ch.row.sample_key, "variation", ch.row.variation);
             batch_handles.emplace_back(ch.snapshot);
             batch_handles.emplace_back(ch.n_total);
-            batch_handles.emplace_back(ch.n_base);
+            batch_handles.emplace_back(ch.sum_base);
         }
 
         if (!batch_handles.empty()) {
@@ -497,11 +503,11 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         for (std::size_t idx = batch_start; idx < batch_end; ++idx) {
             auto &ch = counts[idx];
             const std::size_t step = idx + 1;
-            const auto total_events = static_cast<unsigned long long>(*ch.n_total);
-            const auto base_events = static_cast<unsigned long long>(*ch.n_base);
+            ch.row.n_total = static_cast<unsigned long long>(*ch.n_total);
+            ch.row.n_base = static_cast<unsigned long long>(*ch.sum_base);
             log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset", step, "/", total_datasets,
                       "- sample", ch.row.sample_key, "variation", ch.row.variation, "events processed:",
-                      total_events, "base selection:", base_events);
+                      ch.row.n_total, "base selection:", ch.row.n_base);
         }
 
         if (batch_end < total_datasets) {
@@ -518,11 +524,42 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
     }
 
+    unsigned int merge_threads = std::thread::hardware_concurrency();
+    if (merge_threads == 0) {
+        merge_threads = 1;
+    }
+
+    std::ostringstream hadd_cmd;
+    hadd_cmd << "hadd -f -k ";
+    hadd_cmd << "-j " << merge_threads << ' ';
+    hadd_cmd << output_file << ' ';
+    hadd_cmd << temp_dir << "/part_*.root";
+
+    log::info("SnapshotPipelineBuilder::snapshot", "Merging files with:", hadd_cmd.str());
+    int merge_result = gSystem->Exec(hadd_cmd.str().c_str());
+
+    if (merge_result != 0) {
+        log::info("SnapshotPipelineBuilder::snapshot", "hadd failed, using TFileMerger");
+        TFileMerger merger(false, false);
+        merger.SetFastMethod(true);
+        if (!merger.OutputFile(output_file.c_str(), "RECREATE")) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create output file for merge:", output_file);
+        }
+        for (const auto &part_file : part_files) {
+            merger.AddFile(part_file.c_str());
+        }
+        if (!merger.Merge()) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "TFileMerger failed to merge output files");
+        }
+    }
+
+    gSystem->Exec(("rm -rf " + temp_dir).c_str());
+
     std::vector<CutflowRow> cutflow;
     cutflow.reserve(counts.size());
     for (auto &ch : counts) {
         ch.row.n_total = static_cast<unsigned long long>(*ch.n_total);
-        ch.row.n_base = static_cast<unsigned long long>(*ch.n_base);
+        ch.row.n_base = static_cast<unsigned long long>(*ch.sum_base);
         cutflow.emplace_back(std::move(ch.row));
     }
 
