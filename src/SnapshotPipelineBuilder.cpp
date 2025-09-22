@@ -2,22 +2,17 @@
 
 #include "TDirectory.h"
 #include "TFile.h"
-#include "TFileMerger.h"
-#include "TROOT.h"
 #include "TTree.h"
 #include "TObject.h"
-#include "TSystem.h"
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
 
 #include <algorithm>
 #include <cctype>
-#include <chrono>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -415,160 +410,77 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                        "origin_id",      "event_uid",    "rsub_key",   "base_sel",   "w_nom",
                        "is_mc",          "is_nominal",   "sampvar_uid", "sample_pot", "sample_triggers"});
 
-    // Per-(sample, variation) results, one dataframe per node
-    using SnapshotResultHandle = decltype(std::declval<ROOT::RDF::RNode>().Snapshot(
-        std::declval<std::string>(), std::declval<std::string>(),
-        std::declval<std::vector<std::string>>(), std::declval<ROOT::RDF::RSnapshotOptions>()));
+    auto big = ROOT::RDF::Concatenate(nodes);
 
-    struct CountHandles {
+    ROOT::RDF::RSnapshotOptions opt;
+    opt.fMode = "RECREATE";
+    opt.fLazy = false;
+    opt.fCompressionAlgorithm = ROOT::kLZ4;
+    opt.fCompressionLevel = 1;
+    if constexpr (snapshot_detail::has_autoflush_v<ROOT::RDF::RSnapshotOptions>) {
+        opt.fAutoFlush = -64 * 1024 * 1024;
+    }
+    opt.fBasketSize = 2 * 1024 * 1024;
+    opt.fSplitLevel = 0;
+    if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
+        opt.fOverwriteIfExists = true;
+    }
+
+    auto snap = big.Snapshot("events", output_file, final_cols, opt);
+
+    struct RowH {
         CutflowRow row;
-        SnapshotResultHandle snapshot;
         ROOT::RDF::RResultPtr<ULong64_t> n_total;
-        ROOT::RDF::RResultPtr<double> sum_base;
+        ROOT::RDF::RResultPtr<ULong64_t> n_base;
     };
-    std::vector<CountHandles> counts;
-    counts.reserve(combos.size());
-    std::vector<std::string> part_files;
-    part_files.reserve(combos.size());
 
-    std::string temp_dir = output_file + ".tmp";
-    gSystem->mkdir(temp_dir.c_str(), true);
+    std::vector<RowH> rows;
+    rows.reserve(combos.size());
 
-    for (std::size_t idx = 0; idx < combos.size(); ++idx) {
-        auto &c = combos[idx];
+    for (auto &c : combos) {
+        auto grp = big.Filter(
+            [sid = c.sid, vid = c.vid](uint32_t s, uint16_t v) { return s == sid && v == vid; },
+            {"sample_id", "variation_id"});
 
-        CountHandles ch;
-        ch.row.sample_id = c.sid;
-        ch.row.variation_id = c.vid;
-        ch.row.beam_id = c.bid;
-        ch.row.period_id = c.pid;
-        ch.row.stage_id = c.stg;
-        ch.row.origin_id = c.oid;
-        ch.row.sample_key = std::move(c.sk);
-        ch.row.variation = std::move(c.vlab);
-        ch.row.beam = std::move(c.beam);
-        ch.row.period = std::move(c.period);
-        ch.row.stage = std::move(c.stage);
-        ch.row.origin = std::move(c.origin);
+        RowH r;
+        r.row.sample_id = c.sid;
+        r.row.variation_id = c.vid;
+        r.row.beam_id = c.bid;
+        r.row.period_id = c.pid;
+        r.row.stage_id = c.stg;
+        r.row.origin_id = c.oid;
+        r.row.sample_key = std::move(c.sk);
+        r.row.variation = std::move(c.vlab);
+        r.row.beam = std::move(c.beam);
+        r.row.period = std::move(c.period);
+        r.row.stage = std::move(c.stage);
+        r.row.origin = std::move(c.origin);
 
-        auto &node = nodes[idx];
-        ch.n_total = node.Count();
-        ch.sum_base = node.Sum<double>("base_sel");
+        r.n_total = grp.Count();
+        auto grp_u = grp.Define("base_sel_u64", "static_cast<ULong64_t>(base_sel)");
+        r.n_base = grp_u.Sum<ULong64_t>("base_sel_u64");
 
-        std::string part_file = temp_dir + "/part_" + std::to_string(idx) + ".root";
-        part_files.emplace_back(part_file);
-
-        ROOT::RDF::RSnapshotOptions opt;
-        opt.fMode = "RECREATE";
-        opt.fLazy = true;
-        opt.fCompressionAlgorithm = ROOT::kLZ4;
-        opt.fCompressionLevel = 1;
-        if constexpr (snapshot_detail::has_autoflush_v<ROOT::RDF::RSnapshotOptions>) {
-            opt.fAutoFlush = -30000000;
-        }
-        if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
-            opt.fOverwriteIfExists = true;
-        }
-
-        ch.snapshot = node.Snapshot("events", part_file, final_cols, opt);
-        counts.emplace_back(std::move(ch));
+        rows.emplace_back(std::move(r));
     }
 
-    constexpr std::size_t HANDLES_PER_DATASET = 3;
-    const bool implicit_mt_enabled = ROOT::IsImplicitMTEnabled();
-    const std::size_t batch_size = implicit_mt_enabled ? std::size_t{1} : std::size_t{5};
-    const std::size_t total_datasets = counts.size();
-    const std::size_t total_batches = total_datasets == 0 ? 0 : (total_datasets + batch_size - 1) / batch_size;
-
-    if (implicit_mt_enabled && total_batches > 1) {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Implicit MT enabled; processing datasets sequentially");
+    std::vector<ROOT::RDF::RResultHandle> hs;
+    hs.reserve(1 + rows.size() * 2);
+    hs.push_back(snap.GetHandle());
+    for (auto &r : rows) {
+        hs.push_back(r.n_total.GetHandle());
+        hs.push_back(r.n_base.GetHandle());
     }
-
-    log::info("SnapshotPipelineBuilder::snapshot", "Executing snapshot for", total_datasets,
-              "datasets in batches of", batch_size);
-
-    for (std::size_t batch_start = 0; batch_start < total_datasets; batch_start += batch_size) {
-        const std::size_t batch_end = std::min(batch_start + batch_size, total_datasets);
-        std::vector<ROOT::RDF::RResultHandle> batch_handles;
-        batch_handles.reserve((batch_end - batch_start) * HANDLES_PER_DATASET);
-
-        for (std::size_t idx = batch_start; idx < batch_end; ++idx) {
-            auto &ch = counts[idx];
-            const std::size_t step = idx + 1;
-            log::info("SnapshotPipelineBuilder::snapshot", "Queuing dataset", step, "/", total_datasets,
-                      "- sample", ch.row.sample_key, "variation", ch.row.variation);
-            batch_handles.emplace_back(ch.snapshot);
-            batch_handles.emplace_back(ch.n_total);
-            batch_handles.emplace_back(ch.sum_base);
-        }
-
-        if (!batch_handles.empty()) {
-            const std::size_t batch_number = (batch_start / batch_size) + 1;
-            log::info("SnapshotPipelineBuilder::snapshot", "Executing batch", batch_number, "/", total_batches);
-            ROOT::RDF::RunGraphs(batch_handles);
-        }
-
-        for (std::size_t idx = batch_start; idx < batch_end; ++idx) {
-            auto &ch = counts[idx];
-            const std::size_t step = idx + 1;
-            ch.row.n_total = static_cast<unsigned long long>(*ch.n_total);
-            ch.row.n_base = static_cast<unsigned long long>(*ch.sum_base);
-            log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset", step, "/", total_datasets,
-                      "- sample", ch.row.sample_key, "variation", ch.row.variation, "events processed:",
-                      ch.row.n_total, "base selection:", ch.row.n_base);
-        }
-
-        if (batch_end < total_datasets) {
-            gSystem->ProcessEvents();
-            if (auto canvases = gROOT->GetListOfCanvases()) {
-                canvases->Delete();
-            }
-            if (TDirectory *dir = gDirectory) {
-                if (auto dir_list = dir->GetList()) {
-                    dir_list->Delete();
-                }
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-    }
-
-    unsigned int merge_threads = std::thread::hardware_concurrency();
-    if (merge_threads == 0) {
-        merge_threads = 1;
-    }
-
-    std::ostringstream hadd_cmd;
-    hadd_cmd << "hadd -f -k ";
-    hadd_cmd << "-j " << merge_threads << ' ';
-    hadd_cmd << output_file << ' ';
-    hadd_cmd << temp_dir << "/part_*.root";
-
-    log::info("SnapshotPipelineBuilder::snapshot", "Merging files with:", hadd_cmd.str());
-    int merge_result = gSystem->Exec(hadd_cmd.str().c_str());
-
-    if (merge_result != 0) {
-        log::info("SnapshotPipelineBuilder::snapshot", "hadd failed, using TFileMerger");
-        TFileMerger merger(false, false);
-        merger.SetFastMethod(true);
-        if (!merger.OutputFile(output_file.c_str(), "RECREATE")) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create output file for merge:", output_file);
-        }
-        for (const auto &part_file : part_files) {
-            merger.AddFile(part_file.c_str());
-        }
-        if (!merger.Merge()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "TFileMerger failed to merge output files");
-        }
-    }
-
-    gSystem->Exec(("rm -rf " + temp_dir).c_str());
+    ROOT::RDF::RunGraphs(hs);
 
     std::vector<CutflowRow> cutflow;
-    cutflow.reserve(counts.size());
-    for (auto &ch : counts) {
-        ch.row.n_total = static_cast<unsigned long long>(*ch.n_total);
-        ch.row.n_base = static_cast<unsigned long long>(*ch.sum_base);
-        cutflow.emplace_back(std::move(ch.row));
+    cutflow.reserve(rows.size());
+    for (auto &r : rows) {
+        r.row.n_total = static_cast<unsigned long long>(*r.n_total);
+        r.row.n_base = static_cast<unsigned long long>(*r.n_base);
+        log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset - sample", r.row.sample_key,
+                  "variation", r.row.variation, "events processed:", r.row.n_total, "base selection:",
+                  r.row.n_base);
+        cutflow.emplace_back(std::move(r.row));
     }
 
     // Write metadata + index
