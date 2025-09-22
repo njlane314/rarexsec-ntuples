@@ -61,6 +61,13 @@ template <typename T>
 constexpr bool has_autoflush_v = has_autoflush<T>::value;
 
 template <typename T, typename = void>
+struct has_basket_size : std::false_type {};
+template <typename T>
+struct has_basket_size<T, std::void_t<decltype(std::declval<T &>().fBasketSize)>> : std::true_type {};
+template <typename T>
+constexpr bool has_basket_size_v = has_basket_size<T>::value;
+
+template <typename T, typename = void>
 struct has_overwrite : std::false_type {};
 template <typename T>
 struct has_overwrite<T, std::void_t<decltype(std::declval<T &>().fOverwriteIfExists)>> : std::true_type {};
@@ -410,23 +417,21 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                        "origin_id",      "event_uid",    "rsub_key",   "base_sel",   "w_nom",
                        "is_mc",          "is_nominal",   "sampvar_uid", "sample_pot", "sample_triggers"});
 
-    auto big = ROOT::RDF::Concatenate(nodes);
-
-    ROOT::RDF::RSnapshotOptions opt;
-    opt.fMode = "RECREATE";
-    opt.fLazy = false;
-    opt.fCompressionAlgorithm = ROOT::kLZ4;
-    opt.fCompressionLevel = 1;
+    ROOT::RDF::RSnapshotOptions base_opt;
+    base_opt.fMode = "RECREATE";
+    base_opt.fLazy = false;
+    base_opt.fCompressionAlgorithm = ROOT::kLZ4;
+    base_opt.fCompressionLevel = 1;
     if constexpr (snapshot_detail::has_autoflush_v<ROOT::RDF::RSnapshotOptions>) {
-        opt.fAutoFlush = -64 * 1024 * 1024;
+        base_opt.fAutoFlush = -64 * 1024 * 1024;
     }
-    opt.fBasketSize = 2 * 1024 * 1024;
-    opt.fSplitLevel = 0;
+    if constexpr (snapshot_detail::has_basket_size_v<ROOT::RDF::RSnapshotOptions>) {
+        base_opt.fBasketSize = 2 * 1024 * 1024;
+    }
+    base_opt.fSplitLevel = 0;
     if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
-        opt.fOverwriteIfExists = true;
+        base_opt.fOverwriteIfExists = true;
     }
-
-    auto snap = big.Snapshot("events", output_file, final_cols, opt);
 
     struct RowH {
         CutflowRow row;
@@ -437,10 +442,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     std::vector<RowH> rows;
     rows.reserve(combos.size());
 
-    for (auto &c : combos) {
-        auto grp = big.Filter(
-            [sid = c.sid, vid = c.vid](uint32_t s, uint16_t v) { return s == sid && v == vid; },
-            {"sample_id", "variation_id"});
+    bool first_snapshot = true;
+    for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
+        auto &node = nodes[idx];
+        auto &c = combos[idx];
 
         RowH r;
         r.row.sample_id = c.sid;
@@ -456,25 +461,24 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         r.row.stage = std::move(c.stage);
         r.row.origin = std::move(c.origin);
 
-        r.n_total = grp.Count();
-        auto grp_u = grp.Define("base_sel_u64", "static_cast<ULong64_t>(base_sel)");
-        r.n_base = grp_u.Sum<ULong64_t>("base_sel_u64");
+        r.n_total = node.Count();
+        auto node_u = node.Define("base_sel_u64", "static_cast<ULong64_t>(base_sel)");
+        r.n_base = node_u.Sum("base_sel_u64");
+
+        auto opt = base_opt;
+        opt.fMode = first_snapshot ? "RECREATE" : "UPDATE";
+        first_snapshot = false;
+        auto snap = node.Snapshot("events", output_file, final_cols, opt);
+        snap.GetValue();
 
         rows.emplace_back(std::move(r));
     }
 
-    std::vector<ROOT::RDF::RResultHandle> hs;
-    hs.reserve(1 + rows.size() * 2);
-    hs.push_back(snap.GetHandle());
-    for (auto &r : rows) {
-        hs.push_back(r.n_total.GetHandle());
-        hs.push_back(r.n_base.GetHandle());
-    }
-    ROOT::RDF::RunGraphs(hs);
-
     std::vector<CutflowRow> cutflow;
     cutflow.reserve(rows.size());
     for (auto &r : rows) {
+        r.n_total.GetValue();
+        r.n_base.GetValue();
         r.row.n_total = static_cast<unsigned long long>(*r.n_total);
         r.row.n_base = static_cast<unsigned long long>(*r.n_base);
         log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset - sample", r.row.sample_key,
