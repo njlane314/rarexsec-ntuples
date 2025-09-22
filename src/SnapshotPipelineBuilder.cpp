@@ -473,16 +473,23 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         counts.emplace_back(std::move(ch));
     }
 
-    constexpr std::size_t BATCH_SIZE = 5;
+    constexpr std::size_t HANDLES_PER_DATASET = 3;
+    const bool implicit_mt_enabled = ROOT::IsImplicitMTEnabled();
+    const std::size_t batch_size = implicit_mt_enabled ? std::size_t{1} : std::size_t{5};
     const std::size_t total_datasets = counts.size();
-    const std::size_t total_batches = total_datasets == 0 ? 0 : (total_datasets + BATCH_SIZE - 1) / BATCH_SIZE;
-    log::info("SnapshotPipelineBuilder::snapshot", "Executing snapshot for", total_datasets,
-              "datasets in batches of", BATCH_SIZE);
+    const std::size_t total_batches = total_datasets == 0 ? 0 : (total_datasets + batch_size - 1) / batch_size;
 
-    for (std::size_t batch_start = 0; batch_start < total_datasets; batch_start += BATCH_SIZE) {
-        const std::size_t batch_end = std::min(batch_start + BATCH_SIZE, total_datasets);
+    if (implicit_mt_enabled && total_batches > 1) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Implicit MT enabled; processing datasets sequentially");
+    }
+
+    log::info("SnapshotPipelineBuilder::snapshot", "Executing snapshot for", total_datasets,
+              "datasets in batches of", batch_size);
+
+    for (std::size_t batch_start = 0; batch_start < total_datasets; batch_start += batch_size) {
+        const std::size_t batch_end = std::min(batch_start + batch_size, total_datasets);
         std::vector<ROOT::RDF::RResultHandle> batch_handles;
-        batch_handles.reserve((batch_end - batch_start) * 3);
+        batch_handles.reserve((batch_end - batch_start) * HANDLES_PER_DATASET);
 
         for (std::size_t idx = batch_start; idx < batch_end; ++idx) {
             auto &ch = counts[idx];
@@ -495,7 +502,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
 
         if (!batch_handles.empty()) {
-            const std::size_t batch_number = (batch_start / BATCH_SIZE) + 1;
+            const std::size_t batch_number = (batch_start / batch_size) + 1;
             log::info("SnapshotPipelineBuilder::snapshot", "Executing batch", batch_number, "/", total_batches);
             ROOT::RDF::RunGraphs(batch_handles);
         }

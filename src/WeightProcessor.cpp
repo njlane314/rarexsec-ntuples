@@ -32,24 +32,59 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
             proc_df = proc_df.Define("base_event_weight", [scale]() { return scale; });
         }
 
-        proc_df = proc_df.Define(
-            "nominal_event_weight",
-            [](double w, float w_spline, float w_tune) {
-                double final_weight = w;
-                if (std::isfinite(w_spline) && w_spline > 0) {
-                    final_weight *= w_spline;
-                }
-                if (std::isfinite(w_tune) && w_tune > 0) {
-                    final_weight *= w_tune;
-                }
-                if (!std::isfinite(final_weight) || final_weight < 0) {
-                    return 1.0;
-                }
-                return final_weight;
-            },
-            {"base_event_weight",
-             "weightSpline",
-             "weightTune"});
+        const bool has_weight_spline = proc_df.HasColumn("weightSpline");
+        const bool has_weight_tune = proc_df.HasColumn("weightTune");
+
+        if (has_weight_spline && has_weight_tune) {
+            proc_df = proc_df.Define(
+                "nominal_event_weight",
+                [](double w, float w_spline, float w_tune) {
+                    double final_weight = w;
+                    if (std::isfinite(w_spline) && w_spline > 0) {
+                        final_weight *= w_spline;
+                    }
+                    if (std::isfinite(w_tune) && w_tune > 0) {
+                        final_weight *= w_tune;
+                    }
+                    if (!std::isfinite(final_weight) || final_weight < 0) {
+                        return 1.0;
+                    }
+                    return final_weight;
+                },
+                {"base_event_weight",
+                 "weightSpline",
+                 "weightTune"});
+        } else if (has_weight_spline) {
+            proc_df = proc_df.Define(
+                "nominal_event_weight",
+                [](double w, float w_spline) {
+                    double final_weight = w;
+                    if (std::isfinite(w_spline) && w_spline > 0) {
+                        final_weight *= w_spline;
+                    }
+                    if (!std::isfinite(final_weight) || final_weight < 0) {
+                        return 1.0;
+                    }
+                    return final_weight;
+                },
+                {"base_event_weight",
+                 "weightSpline"});
+        } else if (has_weight_tune) {
+            proc_df = proc_df.Define(
+                "nominal_event_weight",
+                [](double w, float w_tune) {
+                    double final_weight = w;
+                    if (std::isfinite(w_tune) && w_tune > 0) {
+                        final_weight *= w_tune;
+                    }
+                    if (!std::isfinite(final_weight) || final_weight < 0) {
+                        return 1.0;
+                    }
+                    return final_weight;
+                },
+                {"base_event_weight",
+                 "weightTune"});
+        }
     } else if (st == SampleOrigin::kExternal) {
         double scale = 1.0;
         if (sample_triggers_ > 0 && total_run_triggers_ > 0) {
