@@ -6,6 +6,7 @@
 #include "TTree.h"
 #include "TObject.h"
 #include "ROOT/RDataFrame.hxx"
+#include "ROOT/RDF/RResultHandle.hxx"
 #include "ROOT/RDFHelpers.hxx"
 
 #include <algorithm>
@@ -405,14 +406,27 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     }
 
     log::info("SnapshotPipelineBuilder::snapshot", "Executing snapshot for", counts.size(), "datasets");
+
+    std::vector<ROOT::RDF::RResultHandle> handles;
+    handles.reserve(counts.size() * 3);
+
     for (std::size_t idx = 0; idx < counts.size(); ++idx) {
         auto &ch = counts[idx];
         const std::size_t step = idx + 1;
         log::info("SnapshotPipelineBuilder::snapshot", "Processing dataset", step, "/", counts.size(), "- sample",
-                  ch.row.sample_key, "variation", ch.row.variation);
-        ch.snapshot.GetValue();
-        ch.n_total.GetValue();
-        ch.n_base.GetValue();
+                  ch.row.sample_key, "variation", ch.row.variation, "[queued]");
+        handles.emplace_back(ch.snapshot);
+        handles.emplace_back(ch.n_total);
+        handles.emplace_back(ch.n_base);
+    }
+
+    if (!handles.empty()) {
+        ROOT::RDF::RunGraphs(handles);
+    }
+
+    for (std::size_t idx = 0; idx < counts.size(); ++idx) {
+        auto &ch = counts[idx];
+        const std::size_t step = idx + 1;
         const auto total_events = static_cast<unsigned long long>(*ch.n_total);
         const auto base_events = static_cast<unsigned long long>(*ch.n_base);
         log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset", step, "/", counts.size(), "- sample",
