@@ -439,7 +439,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     std::vector<CountHandles> counts;
     counts.reserve(combos.size());
     for (std::size_t idx = 0; idx < combos.size(); ++idx) {
-        const auto &c = combos[idx];
+        auto &c = combos[idx];
 
         CountHandles ch;
         ch.row.sample_id = c.sid;
@@ -448,12 +448,12 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         ch.row.period_id = c.pid;
         ch.row.stage_id = c.stg;
         ch.row.origin_id = c.oid;
-        ch.row.sample_key = c.sk;
-        ch.row.variation = c.vlab;
-        ch.row.beam = c.beam;
-        ch.row.period = c.period;
-        ch.row.stage = c.stage;
-        ch.row.origin = c.origin;
+        ch.row.sample_key = std::move(c.sk);
+        ch.row.variation = std::move(c.vlab);
+        ch.row.beam = std::move(c.beam);
+        ch.row.period = std::move(c.period);
+        ch.row.stage = std::move(c.stage);
+        ch.row.origin = std::move(c.origin);
 
         ROOT::RDF::RSnapshotOptions opt = base_opt;
         if (idx > 0) {
