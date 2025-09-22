@@ -463,7 +463,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         auto &node = nodes[idx];
         ch.snapshot = node.Snapshot("events", output_file, final_cols, opt);
         ch.n_total = node.Count();
-        ch.n_base = node.Filter("base_sel").Count();
+        ch.n_base = node.Sum<ULong64_t>("base_sel");
         counts.emplace_back(std::move(ch));
     }
 
