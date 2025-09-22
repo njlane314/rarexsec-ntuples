@@ -242,6 +242,11 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         requested.swap(tmp);
     }
 
+    const std::string filter_description = filter_expr.empty() ? std::string{"<none>"} : filter_expr;
+    log::info("SnapshotPipelineBuilder::snapshot", "Preparing snapshot", output_file, "with", requested.size(),
+              "payload columns and filter", filter_description);
+    log::info("SnapshotPipelineBuilder::snapshot", "Processing", frames_.size(), "samples");
+
     // Build provenance dictionaries
     ProvenanceDicts dicts;
     dicts.origin2id[SampleOrigin::kData] =
@@ -271,6 +276,11 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const std::string period = rc ? rc->runPeriod() : std::string{};
         const std::string &stage = sample.stageName();
         const auto origin = sample.sampleOrigin();
+        const std::string stage_label = stage.empty() ? std::string{"<none>"} : stage;
+        const auto variation_nodes = sample.variationNodes().size();
+
+        log::info("SnapshotPipelineBuilder::snapshot", "Configuring sample", key.str(), "origin",
+                  originToString(origin), "stage", stage_label, "with", variation_nodes, "variation nodes");
 
         const uint32_t sid = intern<decltype(dicts.sample2id), std::string, uint32_t>(dicts.sample2id, key.str());
         const uint16_t bid = intern<decltype(dicts.beam2id), std::string, uint16_t>(dicts.beam2id, beam);
@@ -307,12 +317,16 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const std::string vbeam = vrc ? vrc->beamMode() : beam;
             const std::string vperiod = vrc ? vrc->runPeriod() : period;
             const std::string &vstage = vd.stage_name.empty() ? stage : vd.stage_name;
+            const std::string vstage_label = vstage.empty() ? std::string{"<none>"} : vstage;
+            const std::string variation_label = variationLabelOrKey(vd);
 
             const uint16_t vbid = intern<decltype(dicts.beam2id), std::string, uint16_t>(dicts.beam2id, vbeam);
             const uint16_t vpid = intern<decltype(dicts.period2id), std::string, uint16_t>(dicts.period2id, vperiod);
             const uint16_t vstg = intern<decltype(dicts.stage2id), std::string, uint16_t>(dicts.stage2id, vstage);
-            const uint16_t vvid = intern<decltype(dicts.var2id), std::string, uint16_t>(dicts.var2id,
-                                                                                        variationLabelOrKey(vd));
+            const uint16_t vvid = intern<decltype(dicts.var2id), std::string, uint16_t>(dicts.var2id, variation_label);
+
+            log::info("SnapshotPipelineBuilder::snapshot", "Configuring variation", variation_label, "for sample",
+                      key.str(), "stage", vstage_label);
 
             auto vdf = it->second;
             if (!filter_expr.empty()) {
@@ -323,8 +337,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             vdf = defineDownstreamConvenience(vdf, sid, vvid, is_mc, /*is_nominal*/ false, vd.pot, vd.triggers);
             nodes.emplace_back(vdf);
 
-            combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, key.str(), variationLabelOrKey(vd), vbeam,
-                                   vperiod, vstage, originToString(origin)});
+            combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, key.str(), variation_label, vbeam, vperiod,
+                                   vstage, originToString(origin)});
         }
     }
 
@@ -332,6 +346,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "No nodes to process.");
         return;
     }
+
+    log::info("SnapshotPipelineBuilder::snapshot", "Prepared", combos.size(), "dataframe nodes for snapshot");
 
     // Final columns (payload + provenance + helpers)
     std::vector<std::string> final_cols = requested;
@@ -388,10 +404,20 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         counts.emplace_back(std::move(ch));
     }
 
-    for (auto &ch : counts) {
+    log::info("SnapshotPipelineBuilder::snapshot", "Executing snapshot for", counts.size(), "datasets");
+    for (std::size_t idx = 0; idx < counts.size(); ++idx) {
+        auto &ch = counts[idx];
+        const std::size_t step = idx + 1;
+        log::info("SnapshotPipelineBuilder::snapshot", "Processing dataset", step, "/", counts.size(), "- sample",
+                  ch.row.sample_key, "variation", ch.row.variation);
         ch.snapshot.GetValue();
         ch.n_total.GetValue();
         ch.n_base.GetValue();
+        const auto total_events = static_cast<unsigned long long>(*ch.n_total);
+        const auto base_events = static_cast<unsigned long long>(*ch.n_base);
+        log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset", step, "/", counts.size(), "- sample",
+                  ch.row.sample_key, "variation", ch.row.variation, "events processed:", total_events,
+                  "base selection:", base_events);
     }
 
     std::vector<CutflowRow> cutflow;
@@ -404,6 +430,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
     // Write metadata + index
     {
+        log::info("SnapshotPipelineBuilder::snapshot", "Writing metadata tables to", output_file);
         ImplicitMTGuard imt_guard;
         std::unique_ptr<TFile> f(TFile::Open(output_file.c_str(), "UPDATE"));
         if (!f || f->IsZombie()) {
@@ -418,6 +445,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         }
         this->writeSnapshotMetadata(*f, dicts, cutflow);
     }
+
+    log::info("SnapshotPipelineBuilder::snapshot", "Snapshot generation completed:", output_file);
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
@@ -472,6 +501,9 @@ void SnapshotPipelineBuilder::loadAll() {
 }
 
 void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
+    const auto sample_count = rc.sampleConfigs().size();
+    log::info("SnapshotPipelineBuilder::processRunConfig", "Processing run configuration", rc.label(), "with",
+              sample_count, "samples");
     processors_.reserve(processors_.size() + rc.sampleConfigs().size());
     for (auto &sample_json : rc.sampleConfigs()) {
         if (sample_json.contains("active") && !sample_json.at("active").get<bool>()) {
@@ -491,6 +523,9 @@ void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
 
         SamplePipeline sample{sample_json, rc.sampleConfigs(), ntuple_base_directory_, var_registry_, processor};
         const auto sample_key = sample.sampleKey();
+
+        log::info("SnapshotPipelineBuilder::processRunConfig", "Loaded sample", sample_key.str(), "for run config",
+                  rc.label());
 
         run_config_cache_.emplace(sample_key, &rc);
         for (const auto &variation_def : sample.variationDescriptors()) {
