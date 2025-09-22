@@ -40,7 +40,7 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
                               "pass_mu",
                               "pass_topo"});
 
-    return next_ ? next_->process(final_df, st) : final_df;
+    return final_df;
 }
 
 }

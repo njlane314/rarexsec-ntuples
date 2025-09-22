@@ -35,7 +35,7 @@ ROOT::RDF::RNode ReconstructionProcessor::process(ROOT::RDF::RNode df, SampleOri
          "contained_fraction",
          "slice_cluster_fraction"});
 
-    return next_ ? next_->process(quality_df, st) : quality_df;
+    return quality_df;
 }
 
 }

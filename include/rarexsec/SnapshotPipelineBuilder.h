@@ -82,26 +82,10 @@ class SnapshotPipelineBuilder {
     void loadAll();
     void processRunConfig(const RunConfig &rc);
 
-    template <typename Head, typename... Tail>
-    std::unique_ptr<EventProcessorStage> chainProcessorStages(std::unique_ptr<Head> head,
-                                                              std::unique_ptr<Tail>... tail);
-
     void writeSnapshotMetadata(TFile &output_file,
                                const ProvenanceDicts &dicts,
                                const std::vector<CutflowRow> &cutflow) const;
 };
-
-template <typename Head, typename... Tail>
-std::unique_ptr<EventProcessorStage> SnapshotPipelineBuilder::chainProcessorStages(std::unique_ptr<Head> head,
-                                                                                   std::unique_ptr<Tail>... tail) {
-    if constexpr (sizeof...(tail) == 0) {
-        return head;
-    } else {
-        auto next = this->chainProcessorStages(std::move(tail)...);
-        head->chainNextStage(std::move(next));
-        return head;
-    }
-}
 
 }
 
