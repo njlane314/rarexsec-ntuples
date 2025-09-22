@@ -5,15 +5,18 @@
 #include "TROOT.h"
 #include "TTree.h"
 #include "TObject.h"
+#include "TSystem.h"
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -51,6 +54,22 @@ class ImplicitMTGuard {
   private:
     bool was_enabled_;
 };
+
+namespace snapshot_detail {
+template <typename T, typename = void>
+struct has_autoflush : std::false_type {};
+template <typename T>
+struct has_autoflush<T, std::void_t<decltype(std::declval<T &>().fAutoFlush)>> : std::true_type {};
+template <typename T>
+constexpr bool has_autoflush_v = has_autoflush<T>::value;
+
+template <typename T, typename = void>
+struct has_overwrite : std::false_type {};
+template <typename T>
+struct has_overwrite<T, std::void_t<decltype(std::declval<T &>().fOverwriteIfExists)>> : std::true_type {};
+template <typename T>
+constexpr bool has_overwrite_v = has_overwrite<T>::value;
+} // namespace snapshot_detail
 
 std::string canonicaliseBeamName(const std::string &beam) {
     std::string trimmed = beam;
@@ -139,48 +158,36 @@ static ROOT::RDF::RNode defineProvenanceIDs(ROOT::RDF::RNode df, uint32_t sample
 }
 
 static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
-    const bool has_run = df.HasColumn("run");
-    const bool has_sub = df.HasColumn("sub");
-    const bool has_evt = df.HasColumn("evt");
+    const auto column_names = df.GetColumnNames();
+    const std::unordered_set<std::string> column_set(column_names.begin(), column_names.end());
+
+    const bool has_run = column_set.count("run") > 0;
+    const bool has_sub = column_set.count("sub") > 0;
+    const bool has_evt = column_set.count("evt") > 0;
     if (has_run && has_sub && has_evt) {
-        // Match the branch types exactly so ROOT does not attempt to read the
-        // underlying columns as unsigned long long values.
-        df = df.Define(
-                     "event_uid",
-                     [](int run, int sub, int evt) -> ULong64_t {
-                         return (static_cast<ULong64_t>(run) << 42) |
-                                (static_cast<ULong64_t>(sub) << 21) |
-                                static_cast<ULong64_t>(evt);  // [run|sub|evt]
-                     },
-                     {"run", "sub", "evt"})
-                 .Define(
-                     "rsub_key",
-                     [](int run, int sub) -> ULong64_t {
-                         return (static_cast<ULong64_t>(run) << 20) |
-                                static_cast<ULong64_t>(sub);
-                     },
-                     {"run", "sub"});
+        df = df.Define("event_uid",
+                       "((ULong64_t)run << 42) | ((ULong64_t)sub << 21) | (ULong64_t)evt")
+                 .Define("rsub_key", "((ULong64_t)run << 20) | (ULong64_t)sub");
     } else {
-        df = df.Define("event_uid", []() { return 0ULL; })
-                 .Define("rsub_key", []() { return 0ULL; });
+        df = df.Define("event_uid", "0ULL").Define("rsub_key", "0ULL");
     }
 
-    if (df.HasColumn("passes_preselection")) {
-        df = df.Define("base_sel", "passes_preselection");
-    } else if (df.HasColumn("pure_slice_signal")) {
-        df = df.Define("base_sel", "pure_slice_signal");
-    } else if (df.HasColumn("in_fiducial")) {
-        df = df.Define("base_sel", "in_fiducial");
+    if (column_set.count("passes_preselection") > 0) {
+        df = df.Alias("base_sel", "passes_preselection");
+    } else if (column_set.count("pure_slice_signal") > 0) {
+        df = df.Alias("base_sel", "pure_slice_signal");
+    } else if (column_set.count("in_fiducial") > 0) {
+        df = df.Alias("base_sel", "in_fiducial");
     } else {
-        df = df.Define("base_sel", []() { return true; });
+        df = df.Define("base_sel", "true");
     }
 
-    if (df.HasColumn("nominal_event_weight")) {
-        df = df.Define("w_nom", "static_cast<double>(nominal_event_weight)");
-    } else if (df.HasColumn("base_event_weight")) {
-        df = df.Define("w_nom", "static_cast<double>(base_event_weight)");
+    if (column_set.count("nominal_event_weight") > 0) {
+        df = df.Define("w_nom", "(double)nominal_event_weight");
+    } else if (column_set.count("base_event_weight") > 0) {
+        df = df.Define("w_nom", "(double)base_event_weight");
     } else {
-        df = df.Define("w_nom", []() { return 1.0; });
+        df = df.Define("w_nom", "1.0");
     }
 
     return df;
@@ -359,8 +366,14 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     ROOT::RDF::RSnapshotOptions base_opt;
     base_opt.fMode = "RECREATE";
     base_opt.fLazy = false;
-    base_opt.fCompressionAlgorithm = ROOT::kZSTD;
-    base_opt.fCompressionLevel = 3;
+    base_opt.fCompressionAlgorithm = ROOT::kLZ4;
+    base_opt.fCompressionLevel = 1;
+    if constexpr (snapshot_detail::has_autoflush_v<ROOT::RDF::RSnapshotOptions>) {
+        base_opt.fAutoFlush = 100000;
+    }
+    if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
+        base_opt.fOverwriteIfExists = true;
+    }
 
     // Per-(sample, variation) results, one dataframe per node
     using SnapshotResultHandle = decltype(std::declval<ROOT::RDF::RNode>().Snapshot(
@@ -404,33 +417,55 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         counts.emplace_back(std::move(ch));
     }
 
-    log::info("SnapshotPipelineBuilder::snapshot", "Executing snapshot for", counts.size(), "datasets");
+    constexpr std::size_t BATCH_SIZE = 5;
+    const std::size_t total_datasets = counts.size();
+    const std::size_t total_batches = total_datasets == 0 ? 0 : (total_datasets + BATCH_SIZE - 1) / BATCH_SIZE;
+    log::info("SnapshotPipelineBuilder::snapshot", "Executing snapshot for", total_datasets,
+              "datasets in batches of", BATCH_SIZE);
 
-    std::vector<ROOT::RDF::RResultHandle> handles;
-    handles.reserve(counts.size() * 3);
+    for (std::size_t batch_start = 0; batch_start < total_datasets; batch_start += BATCH_SIZE) {
+        const std::size_t batch_end = std::min(batch_start + BATCH_SIZE, total_datasets);
+        std::vector<ROOT::RDF::RResultHandle> batch_handles;
+        batch_handles.reserve((batch_end - batch_start) * 3);
 
-    for (std::size_t idx = 0; idx < counts.size(); ++idx) {
-        auto &ch = counts[idx];
-        const std::size_t step = idx + 1;
-        log::info("SnapshotPipelineBuilder::snapshot", "Processing dataset", step, "/", counts.size(), "- sample",
-                  ch.row.sample_key, "variation", ch.row.variation, "[queued]");
-        handles.emplace_back(ch.snapshot);
-        handles.emplace_back(ch.n_total);
-        handles.emplace_back(ch.n_base);
-    }
+        for (std::size_t idx = batch_start; idx < batch_end; ++idx) {
+            auto &ch = counts[idx];
+            const std::size_t step = idx + 1;
+            log::info("SnapshotPipelineBuilder::snapshot", "Queuing dataset", step, "/", total_datasets,
+                      "- sample", ch.row.sample_key, "variation", ch.row.variation);
+            batch_handles.emplace_back(ch.snapshot);
+            batch_handles.emplace_back(ch.n_total);
+            batch_handles.emplace_back(ch.n_base);
+        }
 
-    if (!handles.empty()) {
-        ROOT::RDF::RunGraphs(handles);
-    }
+        if (!batch_handles.empty()) {
+            const std::size_t batch_number = (batch_start / BATCH_SIZE) + 1;
+            log::info("SnapshotPipelineBuilder::snapshot", "Executing batch", batch_number, "/", total_batches);
+            ROOT::RDF::RunGraphs(batch_handles);
+        }
 
-    for (std::size_t idx = 0; idx < counts.size(); ++idx) {
-        auto &ch = counts[idx];
-        const std::size_t step = idx + 1;
-        const auto total_events = static_cast<unsigned long long>(*ch.n_total);
-        const auto base_events = static_cast<unsigned long long>(*ch.n_base);
-        log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset", step, "/", counts.size(), "- sample",
-                  ch.row.sample_key, "variation", ch.row.variation, "events processed:", total_events,
-                  "base selection:", base_events);
+        for (std::size_t idx = batch_start; idx < batch_end; ++idx) {
+            auto &ch = counts[idx];
+            const std::size_t step = idx + 1;
+            const auto total_events = static_cast<unsigned long long>(*ch.n_total);
+            const auto base_events = static_cast<unsigned long long>(*ch.n_base);
+            log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset", step, "/", total_datasets,
+                      "- sample", ch.row.sample_key, "variation", ch.row.variation, "events processed:",
+                      total_events, "base selection:", base_events);
+        }
+
+        if (batch_end < total_datasets) {
+            gSystem->ProcessEvents();
+            if (auto canvases = gROOT->GetListOfCanvases()) {
+                canvases->Delete();
+            }
+            if (gDirectory != nullptr) {
+                if (auto dir_list = gDirectory->GetList()) {
+                    dir_list->Delete();
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
     }
 
     std::vector<CutflowRow> cutflow;

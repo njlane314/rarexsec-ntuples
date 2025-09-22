@@ -3,6 +3,11 @@
 #include <string>
 #include <vector>
 
+#include <TFile.h>
+#include <TH1.h>
+#include <TROOT.h>
+#include <TTree.h>
+
 #include "ROOT/RDataFrame.hxx"
 
 #include <rarexsec/LoggerUtils.h>
@@ -95,6 +100,12 @@ std::vector<std::string> filterAvailableColumns(const proc::SnapshotPipelineBuil
 } // namespace
 
 int main(int argc, char **argv) {
+    ROOT::EnableImplicitMT();
+    gROOT->SetBatch(kTRUE);
+    TH1::AddDirectory(kFALSE);
+    TFile::SetReadaheadSize(256 * 1024 * 1024);
+    TTree::SetMaxTreeSize(1000000000000LL);
+
     rarexsec::cli::CommandLineOptions options;
     try {
         options = rarexsec::cli::parseArguments(argc, argv);
@@ -129,7 +140,9 @@ int main(int argc, char **argv) {
 
     try {
         proc::log::info("snapshot-analysis", "Enabling ROOT implicit MT with the maximum available threads");
-        ROOT::EnableImplicitMT();
+        if (!ROOT::IsImplicitMTEnabled()) {
+            ROOT::EnableImplicitMT();
+        }
 
         proc::SnapshotPipelineBuilder builder(registry, proc::VariableRegistry{}, resolved_beam, resolved_periods,
                                               *base_dir);
