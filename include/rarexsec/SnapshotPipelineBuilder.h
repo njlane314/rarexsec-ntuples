@@ -18,6 +18,27 @@ class TFile;
 
 namespace proc {
 
+struct ProvenanceDicts {
+  std::unordered_map<std::string, uint32_t> sample2id;
+  std::unordered_map<std::string, uint16_t> beam2id, period2id, stage2id, var2id;
+  std::unordered_map<SampleOrigin, uint8_t> origin2id;
+};
+
+struct CutflowRow {
+  uint32_t sample_id;
+  uint16_t variation_id, beam_id, period_id, stage_id;
+  uint8_t origin_id;
+  unsigned long long n_total = 0ULL;
+  unsigned long long n_base = 0ULL;
+
+  std::string sample_key;
+  std::string variation;
+  std::string beam;
+  std::string period;
+  std::string stage;
+  std::string origin;
+};
+
 class SnapshotPipelineBuilder {
   public:
     using SampleFrameMap = std::map<SampleKey, SamplePipeline>;
@@ -65,7 +86,9 @@ class SnapshotPipelineBuilder {
     std::unique_ptr<EventProcessorStage> chainProcessorStages(std::unique_ptr<Head> head,
                                                               std::unique_ptr<Tail>... tail);
 
-    void writeSnapshotMetadata(TFile &output_file) const;
+    void writeSnapshotMetadata(TFile &output_file,
+                               const ProvenanceDicts &dicts,
+                               const std::vector<CutflowRow> &cutflow) const;
 };
 
 template <typename Head, typename... Tail>
