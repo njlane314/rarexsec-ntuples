@@ -5,10 +5,11 @@
 #include "TROOT.h"
 #include "TTree.h"
 #include "TObject.h"
-#include "TKey.h"
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
+#include "ROOT/RVersion.hxx"
 
+#include <algorithm>
 #include <cctype>
 #include <memory>
 #include <sstream>
@@ -27,66 +28,6 @@
 #include <rarexsec/WeightProcessor.h>
 
 namespace {
-
-constexpr char kEventsTreeName[] = "events";
-
-template <typename T, typename = void>
-struct HasDirNameOption : std::false_type {};
-
-template <typename T>
-struct HasDirNameOption<T, std::void_t<decltype(std::declval<T &>().fDirName)>> : std::true_type {};
-
-template <typename T, typename = void>
-struct HasGetHandle : std::false_type {};
-
-template <typename T>
-struct HasGetHandle<T, std::void_t<decltype(std::declval<T &>().GetHandle())>> : std::true_type {};
-
-using SnapshotResultPtr = ROOT::RDF::RResultPtr<ROOT::RDF::RInterface<ROOT::Detail::RDF::RLoopManager>>;
-
-constexpr bool kSnapshotOptionsHaveDirName = HasDirNameOption<ROOT::RDF::RSnapshotOptions>::value;
-constexpr bool kSnapshotResultHasHandle = HasGetHandle<SnapshotResultPtr>::value;
-
-template <typename Options, bool HasDirName = HasDirNameOption<Options>::value>
-struct SnapshotDirectorySetter {
-    static void set(Options &, const std::string &) {}
-};
-
-template <typename Options>
-struct SnapshotDirectorySetter<Options, true> {
-    static void set(Options &options, const std::string &directory) { options.fDirName = directory; }
-};
-
-template <typename ResultPtr, bool HasHandle = HasGetHandle<ResultPtr>::value>
-struct SnapshotHandleCollector {
-    static void collect(ResultPtr &, std::vector<ROOT::RDF::RResultHandle> &) {}
-};
-
-template <typename ResultPtr>
-struct SnapshotHandleCollector<ResultPtr, true> {
-    static void collect(ResultPtr &result, std::vector<ROOT::RDF::RResultHandle> &handles) {
-        handles.push_back(result.GetHandle());
-    }
-};
-
-template <typename ResultPtr, bool HasHandle = HasGetHandle<ResultPtr>::value>
-struct SnapshotJobExecutor;
-
-template <typename ResultPtr>
-struct SnapshotJobExecutor<ResultPtr, true> {
-    static void run(std::vector<ResultPtr> &, std::vector<ROOT::RDF::RResultHandle> &handles) {
-        ROOT::RDF::RunGraphs(handles);
-    }
-};
-
-template <typename ResultPtr>
-struct SnapshotJobExecutor<ResultPtr, false> {
-    static void run(std::vector<ResultPtr> &results, std::vector<ROOT::RDF::RResultHandle> &) {
-        for (auto &result : results) {
-            result.GetValue();
-        }
-    }
-};
 
 class ImplicitMTGuard {
   public:
@@ -109,22 +50,6 @@ class ImplicitMTGuard {
     bool was_enabled_;
 };
 
-std::string sanitiseComponent(std::string value) {
-    std::string sanitised;
-    sanitised.reserve(value.size());
-    for (unsigned char ch : value) {
-        if (std::isalnum(ch) || ch == '_' || ch == '-') {
-            sanitised.push_back(static_cast<char>(ch));
-        } else {
-            sanitised.push_back('_');
-        }
-    }
-    if (sanitised.empty()) {
-        sanitised = "unnamed";
-    }
-    return sanitised;
-}
-
 std::string canonicaliseBeamName(const std::string &beam) {
     std::string trimmed = beam;
     const auto begin = trimmed.find_first_not_of(" \t\n\r");
@@ -145,160 +70,71 @@ std::string canonicaliseBeamName(const std::string &beam) {
     return trimmed;
 }
 
-std::vector<std::string> baseDirectoryComponents(const proc::SampleKey &sample_key, const std::string &beam,
-                                                 const std::string &period, proc::SampleOrigin origin,
-                                                 const std::string &stage_name) {
-    std::vector<std::string> components;
-    components.reserve(7);
-    components.emplace_back("samples");
-    if (!beam.empty()) {
-        components.emplace_back(sanitiseComponent(beam));
+// generic "intern"
+template <typename MapT, typename KeyT, typename IdT>
+static IdT intern(MapT &m, const KeyT &k) {
+    auto it = m.find(k);
+    if (it != m.end()) {
+        return it->second;
     }
-    if (!period.empty()) {
-        components.emplace_back(sanitiseComponent(period));
-    }
-    components.emplace_back(sanitiseComponent(proc::originToString(origin)));
-    if (!stage_name.empty()) {
-        components.emplace_back(sanitiseComponent(stage_name));
-    }
-    components.emplace_back(sanitiseComponent(sample_key.str()));
-    return components;
+    IdT id = static_cast<IdT>(m.size());
+    m.emplace(k, id);
+    return id;
 }
 
-std::vector<std::string> nominalDirectoryComponents(const proc::SampleKey &sample_key, const std::string &beam,
-                                                    const std::string &period, proc::SampleOrigin origin,
-                                                    const std::string &stage_name) {
-    auto components = baseDirectoryComponents(sample_key, beam, period, origin, stage_name);
-    components.emplace_back("nominal");
-    return components;
+static std::string variationLabelOrKey(const proc::VariationDescriptor &vd) {
+    return vd.variation_label.empty() ? proc::variationToKey(vd.variation) : vd.variation_label;
 }
 
-std::vector<std::string> variationDirectoryComponents(const proc::SampleKey &base_key,
-                                                      const proc::VariationDescriptor &variation_def,
-                                                      const std::string &beam, const std::string &period,
-                                                      proc::SampleOrigin origin, const std::string &stage_name) {
-    auto components = baseDirectoryComponents(base_key, beam, period, origin, stage_name);
-    components.emplace_back("variations");
-    std::string label = variation_def.variation_label;
-    if (label.empty()) {
-        label = proc::variationToKey(variation_def.variation);
-    }
-    components.emplace_back(sanitiseComponent(label));
-    return components;
+static ROOT::RDF::RNode defineProvenanceIDs(ROOT::RDF::RNode df, uint32_t sample_id, uint16_t beam_id,
+                                            uint16_t period_id, uint16_t stage_id, uint16_t variation_id,
+                                            uint8_t origin_id) {
+    return df.Define("sample_id", [sample_id]() { return sample_id; })
+        .Define("beam_id", [beam_id]() { return beam_id; })
+        .Define("period_id", [period_id]() { return period_id; })
+        .Define("stage_id", [stage_id]() { return stage_id; })
+        .Define("variation_id", [variation_id]() { return variation_id; })
+        .Define("origin_id", [origin_id]() { return origin_id; });
 }
 
-std::string componentsToPath(const std::vector<std::string> &components) {
-    std::ostringstream os;
-    for (std::size_t i = 0; i < components.size(); ++i) {
-        if (i != 0) {
-            os << '/';
-        }
-        os << components[i];
-    }
-    return os.str();
-}
-
-TDirectory *findDirectory(TDirectory &root_directory,
-                          std::unordered_map<std::string, TDirectory *> &directory_lookup,
-                          const std::vector<std::string> &components) {
-    TDirectory *current = &root_directory;
-    std::string current_path;
-
-    for (const auto &component : components) {
-        if (component.empty()) {
-            continue;
-        }
-
-        if (!current_path.empty()) {
-            current_path.push_back('/');
-        }
-        current_path += component;
-
-        auto lookup_it = directory_lookup.find(current_path);
-        if (lookup_it != directory_lookup.end()) {
-            current = lookup_it->second;
-            continue;
-        }
-
-        current->ReadKeys();
-        TDirectory *next = current->GetDirectory(component.c_str());
-        if (!next) {
-            return nullptr;
-        }
-
-        current = next;
-        directory_lookup.emplace(current_path, current);
+static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
+    const bool has_run = df.HasColumn("run");
+    const bool has_sub = df.HasColumn("sub");
+    const bool has_evt = df.HasColumn("evt");
+    if (has_run && has_sub && has_evt) {
+        df = df.Define("event_uid", [](ULong64_t run, ULong64_t sub, ULong64_t evt) {
+            return (run << 42) | (sub << 21) | evt;
+        }, {"run", "sub", "evt"})
+                 .Define("rsub_key", [](ULong64_t run, ULong64_t sub) {
+                     return (run << 20) | sub;
+                 }, {"run", "sub"});
+    } else {
+        df = df.Define("event_uid", []() { return 0ULL; })
+                 .Define("rsub_key", []() { return 0ULL; });
     }
 
-    return current;
-}
-
-TDirectory *getOrCreateDirectory(TDirectory &root_directory,
-                                 std::unordered_map<std::string, TDirectory *> &directory_lookup,
-                                 const std::vector<std::string> &components, const std::string &output_file_path) {
-    if (auto *existing = findDirectory(root_directory, directory_lookup, components)) {
-        return existing;
+    if (df.HasColumn("passes_preselection")) {
+        df = df.Define("base_sel", "passes_preselection");
+    } else if (df.HasColumn("pure_slice_signal")) {
+        df = df.Define("base_sel", "pure_slice_signal");
+    } else if (df.HasColumn("in_fiducial")) {
+        df = df.Define("base_sel", "in_fiducial");
+    } else {
+        df = df.Define("base_sel", []() { return true; });
     }
 
-    TDirectory *current = &root_directory;
-    std::string current_path;
-
-    for (const auto &component : components) {
-        if (component.empty()) {
-            continue;
-        }
-
-        if (!current_path.empty()) {
-            current_path.push_back('/');
-        }
-        current_path += component;
-
-        auto lookup_it = directory_lookup.find(current_path);
-        if (lookup_it != directory_lookup.end()) {
-            current = lookup_it->second;
-            continue;
-        }
-
-        current->ReadKeys();
-        TDirectory *next = current->GetDirectory(component.c_str());
-        if (!next) {
-            if (TObject *existing = current->Get(component.c_str())) {
-                proc::log::fatal("SnapshotPipelineBuilder::snapshot",
-                                 "Existing object with requested name detected", existing->GetName(), "of type",
-                                 existing->ClassName(), "under", current->GetPath());
-            }
-            proc::log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Creating directory", component,
-                            "under", current->GetPath());
-            next = current->mkdir(component.c_str());
-            if (!next) {
-                proc::log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to create directory component",
-                                 component, "in", output_file_path);
-            }
-        } else {
-            proc::log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Reusing existing directory",
-                            component, "under", current->GetPath());
-        }
-
-        current = next;
-        directory_lookup.emplace(current_path, current);
+    if (df.HasColumn("nominal_event_weight")) {
+        df = df.Define("w_nom", "static_cast<double>(nominal_event_weight)");
+    } else if (df.HasColumn("base_event_weight")) {
+        df = df.Define("w_nom", "static_cast<double>(base_event_weight)");
+    } else {
+        df = df.Define("w_nom", []() { return 1.0; });
     }
 
-    return current;
+    return df;
 }
 
-std::string nominalTreePath(const proc::SampleKey &sample_key, const std::string &beam, const std::string &period,
-                            proc::SampleOrigin origin, const std::string &stage_name) {
-    return componentsToPath(nominalDirectoryComponents(sample_key, beam, period, origin, stage_name)) + "/events";
-}
-
-std::string variationTreePath(const proc::SampleKey &base_key, const proc::VariationDescriptor &variation_def,
-                              const std::string &beam, const std::string &period, proc::SampleOrigin origin,
-                              const std::string &stage_name) {
-    return componentsToPath(variationDirectoryComponents(base_key, variation_def, beam, period, origin, stage_name)) +
-           "/events";
-}
-
-}
+} // namespace
 
 namespace proc {
 
@@ -328,8 +164,6 @@ const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey 
 
 void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
                                        const std::vector<std::string> &columns) const {
-    bool wrote_anything = false;
-
     log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting snapshot over", frames_.size(),
               "samples to", output_file);
     if (filter_expr.empty()) {
@@ -338,256 +172,233 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Filter expression:", filter_expr);
     }
 
-    const std::vector<std::string> *snapshot_columns = &columns;
-    std::vector<std::string> deduplicated_columns;
-    if (!columns.empty()) {
-        std::unordered_set<std::string> seen_columns;
-        seen_columns.reserve(columns.size());
-        deduplicated_columns.reserve(columns.size());
-        for (const auto &column : columns) {
-            if (seen_columns.insert(column).second) {
-                deduplicated_columns.push_back(column);
+    std::vector<std::string> requested = columns;
+    {
+        std::unordered_set<std::string> seen;
+        std::vector<std::string> tmp;
+        tmp.reserve(requested.size());
+        for (auto &column : requested) {
+            if (seen.insert(column).second) {
+                tmp.emplace_back(std::move(column));
             } else {
                 log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "Duplicate snapshot column", column,
                           "will be ignored");
             }
         }
-        if (deduplicated_columns.size() != columns.size()) {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Removed",
-                      columns.size() - deduplicated_columns.size(),
-                      "duplicate column entries from snapshot request");
-            snapshot_columns = &deduplicated_columns;
-        }
+        requested.swap(tmp);
     }
 
-    if (snapshot_columns->empty()) {
+    if (requested.empty()) {
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No explicit column list provided");
     } else {
         std::ostringstream column_stream;
-        for (std::size_t i = 0; i < snapshot_columns->size(); ++i) {
+        for (std::size_t i = 0; i < requested.size(); ++i) {
             if (i != 0) {
                 column_stream << ", ";
             }
-            column_stream << snapshot_columns->at(i);
+            column_stream << requested[i];
         }
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Requested columns:", column_stream.str());
     }
 
-    std::vector<std::vector<std::string>> directories_to_create;
-    directories_to_create.reserve(frames_.size());
-    std::unordered_set<std::string> scheduled_directory_paths;
-    scheduled_directory_paths.reserve(frames_.size());
+    ProvenanceDicts dicts;
+    dicts.origin2id[SampleOrigin::kData] =
+        intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kData);
+    dicts.origin2id[SampleOrigin::kMonteCarlo] =
+        intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kMonteCarlo);
+    dicts.origin2id[SampleOrigin::kDirt] =
+        intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kDirt);
+    dicts.origin2id[SampleOrigin::kExternal] =
+        intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kExternal);
 
-    auto schedule_directory = [&](std::vector<std::string> components, std::string description) {
-        const std::string directory_path = componentsToPath(components);
-        if (scheduled_directory_paths.insert(directory_path).second) {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", std::move(description), directory_path);
-            directories_to_create.push_back(std::move(components));
-        } else {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Skipping duplicate directory", directory_path);
-        }
+    std::vector<ROOT::RDF::RNode> nodes;
+    nodes.reserve(frames_.size() * 2);
+
+    struct Combo {
+        uint32_t sid;
+        uint16_t vid;
+        uint16_t bid;
+        uint16_t pid;
+        uint16_t stg;
+        uint8_t oid;
+        std::string sk;
+        std::string vlab;
+        std::string beam;
+        std::string period;
+        std::string stage;
+        std::string origin;
     };
 
-    std::size_t total_trees = 0;
+    std::vector<Combo> combos;
+    combos.reserve(frames_.size() * 4);
+
     for (const auto &[key, sample] : frames_) {
         const auto *rc = this->getRunConfigForSample(key);
-        const std::string sample_beam = rc ? rc->beamMode() : std::string{};
-        const std::string sample_period = rc ? rc->runPeriod() : std::string{};
-        const std::string &sample_stage = sample.stageName();
+        const std::string beam = rc ? rc->beamMode() : std::string{};
+        const std::string period = rc ? rc->runPeriod() : std::string{};
+        const std::string &stage = sample.stageName();
+        const auto origin = sample.sampleOrigin();
 
-        schedule_directory(nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(),
-                                                      sample_stage),
-                           "Scheduled nominal directory");
-        ++total_trees;
+        const uint32_t sid = intern<decltype(dicts.sample2id), std::string, uint32_t>(dicts.sample2id, key.str());
+        const uint16_t bid = intern<decltype(dicts.beam2id), std::string, uint16_t>(dicts.beam2id, beam);
+        const uint16_t pid = intern<decltype(dicts.period2id), std::string, uint16_t>(dicts.period2id, period);
+        const uint16_t stg = intern<decltype(dicts.stage2id), std::string, uint16_t>(dicts.stage2id, stage);
+        const uint16_t vnom = intern<decltype(dicts.var2id), std::string, uint16_t>(dicts.var2id, "nominal");
+        const uint8_t oid = dicts.origin2id.at(origin);
 
-        const auto &variation_nodes = sample.variationNodes();
-        for (const auto &variation_def : sample.variationDescriptors()) {
-            if (!variation_nodes.count(variation_def.variation)) {
+        {
+            auto df = sample.nominalNode();
+            if (!filter_expr.empty()) {
+                df = df.Filter(filter_expr);
+            }
+            df = defineProvenanceIDs(df, sid, bid, pid, stg, vnom, oid);
+            df = defineAnalysisAliases(df);
+            nodes.emplace_back(df);
+
+            combos.push_back(Combo{sid, vnom, bid, pid, stg, oid, key.str(), "nominal", beam, period, stage,
+                                   originToString(origin)});
+        }
+
+        for (const auto &vd : sample.variationDescriptors()) {
+            auto it = sample.variationNodes().find(vd.variation);
+            if (it == sample.variationNodes().end()) {
                 continue;
             }
 
-            const auto *variation_rc = this->getRunConfigForSample(variation_def.sample_key);
-            const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
-            const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
-            const std::string &variation_stage =
-                variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
+            const auto *vrc = this->getRunConfigForSample(vd.sample_key);
+            const std::string vbeam = vrc ? vrc->beamMode() : beam;
+            const std::string vperiod = vrc ? vrc->runPeriod() : period;
+            const std::string &vstage = vd.stage_name.empty() ? stage : vd.stage_name;
 
-            schedule_directory(variationDirectoryComponents(key, variation_def, variation_beam, variation_period,
-                                                            sample.sampleOrigin(), variation_stage),
-                               "Scheduled variation directory");
-            ++total_trees;
-        }
-    }
+            const uint16_t vbid = intern<decltype(dicts.beam2id), std::string, uint16_t>(dicts.beam2id, vbeam);
+            const uint16_t vpid = intern<decltype(dicts.period2id), std::string, uint16_t>(dicts.period2id, vperiod);
+            const uint16_t vstg = intern<decltype(dicts.stage2id), std::string, uint16_t>(dicts.stage2id, vstage);
+            const uint16_t vvid = intern<decltype(dicts.var2id), std::string, uint16_t>(dicts.var2id,
+                                                                                        variationLabelOrKey(vd));
 
-    auto file_deleter = [](TFile *ptr) {
-        if (!ptr) {
-            return;
-        }
-        ptr->Write("", TObject::kOverwrite);
-        ptr->Close();
-        delete ptr;
-    };
-
-    std::unique_ptr<TFile, decltype(file_deleter)> output_handle(nullptr, file_deleter);
-    std::unordered_map<std::string, TDirectory *> directory_lookup;
-
-    if (total_trees > 0) {
-        ImplicitMTGuard imt_guard;
-        output_handle.reset(TFile::Open(output_file.c_str(), "RECREATE"));
-        if (!output_handle || output_handle->IsZombie()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to open snapshot output", output_file,
-                       "with mode", "RECREATE");
-        }
-
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Prepared to populate", directories_to_create.size(),
-                  "directory paths in", output_file);
-
-        directory_lookup.reserve(directories_to_create.size() * 4 + 1);
-        directory_lookup.emplace("", output_handle.get());
-
-        for (const auto &components : directories_to_create) {
-            getOrCreateDirectory(*output_handle, directory_lookup, components, output_file);
-        }
-    } else {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
-                  "No directories requested during initialisation for", output_file);
-    }
-
-    std::size_t processed_trees = 0;
-    if (total_trees > 0) {
-        log::info("SnapshotPipelineBuilder::snapshot", "Preparing to write", total_trees, "trees to", output_file);
-    }
-
-    std::vector<std::vector<std::string>> scheduled_snapshot_directories;
-    scheduled_snapshot_directories.reserve(total_trees);
-    std::vector<std::string> scheduled_tree_paths;
-    scheduled_tree_paths.reserve(total_trees);
-    std::vector<SnapshotResultPtr> snapshot_results;
-    snapshot_results.reserve(total_trees);
-    std::vector<ROOT::RDF::RResultHandle> job_handles;
-    job_handles.reserve(total_trees);
-
-    auto schedule_snapshot = [&](ROOT::RDF::RNode df, const std::vector<std::string> &directory_components) {
-        if (!output_handle) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Snapshot output file was not initialised before",
-                       "scheduling snapshot jobs for", output_file);
-        }
-
-        const std::string directory_path = componentsToPath(directory_components);
-        const std::string tree_path = directory_path + '/' + kEventsTreeName;
-        const std::string snapshot_tree_name =
-            kSnapshotOptionsHaveDirName ? std::string{kEventsTreeName} : tree_path;
-
-        if (!filter_expr.empty()) {
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Applying filter to", tree_path);
-            df = df.Filter(filter_expr);
-        }
-
-        TDirectory *target_directory =
-            getOrCreateDirectory(*output_handle, directory_lookup, directory_components, output_file);
-        if (target_directory) {
-            target_directory->cd();
-            target_directory->ReadKeys();
-            if (target_directory->GetKey(kEventsTreeName)) {
-                const std::string delete_pattern = std::string(kEventsTreeName) + ";*";
-                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Removing existing tree from", tree_path);
-                target_directory->Delete(delete_pattern.c_str());
+            auto vdf = it->second;
+            if (!filter_expr.empty()) {
+                vdf = vdf.Filter(filter_expr);
             }
-        }
+            vdf = defineProvenanceIDs(vdf, sid, vbid, vpid, vstg, vvid, oid);
+            vdf = defineAnalysisAliases(vdf);
+            nodes.emplace_back(vdf);
 
-        ROOT::RDF::RSnapshotOptions tree_opts;
-        tree_opts.fMode = "RECREATE";
-        tree_opts.fLazy = true;
-
-        const std::string target_path = output_file + ":/" + directory_path;
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Scheduling tree", tree_path, "to",
-                  target_directory ? target_directory->GetPath() : target_path);
-        SnapshotDirectorySetter<ROOT::RDF::RSnapshotOptions>::set(tree_opts, directory_path);
-
-        auto result = df.Snapshot(snapshot_tree_name, output_file, *snapshot_columns, tree_opts);
-
-        SnapshotHandleCollector<SnapshotResultPtr>::collect(result, job_handles);
-        snapshot_results.push_back(std::move(result));
-        scheduled_snapshot_directories.push_back(directory_components);
-        scheduled_tree_paths.push_back(tree_path);
-    };
-
-    for (auto const &[key, sample] : frames_) {
-        const auto *rc = this->getRunConfigForSample(key);
-        const std::string sample_beam = rc ? rc->beamMode() : std::string{};
-        const std::string sample_period = rc ? rc->runPeriod() : std::string{};
-        const std::string &sample_stage = sample.stageName();
-
-        const auto nominal_directory_components =
-            nominalDirectoryComponents(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
-        schedule_snapshot(sample.nominalNode(), nominal_directory_components);
-        const auto &variation_nodes = sample.variationNodes();
-        for (const auto &variation_def : sample.variationDescriptors()) {
-            auto it = variation_nodes.find(variation_def.variation);
-            if (it == variation_nodes.end()) {
-                continue;
-            }
-            const auto *variation_rc = this->getRunConfigForSample(variation_def.sample_key);
-            const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
-            const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
-            const std::string &variation_stage =
-                variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
-
-            const auto variation_directory_components =
-                variationDirectoryComponents(key, variation_def, variation_beam, variation_period,
-                                             sample.sampleOrigin(), variation_stage);
-            schedule_snapshot(it->second, variation_directory_components);
+            combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, key.str(), variationLabelOrKey(vd), vbeam,
+                                   vperiod, vstage, originToString(origin)});
         }
     }
 
-    if (!snapshot_results.empty()) {
-        if constexpr (kSnapshotResultHasHandle) {
-            log::info("SnapshotPipelineBuilder::snapshot", "Executing", job_handles.size(),
-                      "snapshot jobs with ROOT::RDF::RunGraphs");
-        } else {
-            log::info("SnapshotPipelineBuilder::snapshot", "Executing", snapshot_results.size(),
-                      "snapshot jobs sequentially");
-        }
-
-        SnapshotJobExecutor<SnapshotResultPtr>::run(snapshot_results, job_handles);
-
-        for (std::size_t i = 0; i < scheduled_tree_paths.size(); ++i) {
-            const auto &components = scheduled_snapshot_directories[i];
-            const std::string &tree_path = scheduled_tree_paths[i];
-            TDirectory *target_directory = findDirectory(*output_handle, directory_lookup, components);
-            if (!target_directory) {
-                log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
-                          "Expected directory missing after snapshot at", tree_path);
-                continue;
-            }
-
-            target_directory->ReadKeys();
-            if (target_directory->GetKey(kEventsTreeName)) {
-                ++processed_trees;
-                wrote_anything = true;
-                log::info("SnapshotPipelineBuilder::snapshot", "[progress]", "Wrote", processed_trees, '/',
-                          total_trees, "trees -", tree_path);
-            } else {
-                log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
-                          "Expected tree missing after snapshot at", tree_path);
-            }
-        }
-    } else {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No snapshot jobs were scheduled");
-    }
-
-    if (!wrote_anything) {
-        log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "No samples were written to", output_file);
+    if (nodes.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "No nodes to process.");
         return;
     }
 
-    if (!output_handle) {
-        log::fatal("SnapshotPipelineBuilder::snapshot", "Snapshot output handle was released before metadata write for",
-                   output_file);
+    auto big = ROOT::RDF::Concatenate(nodes);
+
+    std::unordered_set<std::string> final_seen;
+    std::vector<std::string> final_cols;
+    final_cols.reserve(requested.size() + 10);
+    for (const auto &col : requested) {
+        if (final_seen.insert(col).second) {
+            final_cols.push_back(col);
+        }
     }
 
-    output_handle->cd();
-    this->writeSnapshotMetadata(*output_handle);
+    const std::vector<std::string> extras = {
+        "sample_id",   "beam_id", "period_id", "stage_id",     "variation_id", "origin_id",
+        "event_uid",   "rsub_key", "base_sel",  "w_nom"
+    };
+    for (const auto &col : extras) {
+        if (final_seen.insert(col).second) {
+            final_cols.push_back(col);
+        }
+    }
+
+    ROOT::RDF::RSnapshotOptions opt;
+    opt.fMode = "RECREATE";
+    opt.fLazy = false;
+    opt.fCompressionSettings = ROOT::CompressionSettings(ROOT::kZSTD, 3);
+#if ROOT_VERSION_CODE >= ROOT_VERSION(6, 30, 0)
+    opt.fOverwriteIfExists = true;
+#endif
+
+    auto snap = big.Snapshot("events", output_file, final_cols, opt);
+
+    struct CountHandles {
+        CutflowRow row;
+        ROOT::RDF::RResultPtr<ULong64_t> n_total;
+        ROOT::RDF::RResultPtr<ULong64_t> n_base;
+    };
+
+    std::vector<CountHandles> counts;
+    counts.reserve(combos.size());
+
+    for (const auto &c : combos) {
+        auto pass_combo = [sid = c.sid, vid = c.vid](uint32_t s, uint16_t v) { return s == sid && v == vid; };
+        auto view = big.Filter(pass_combo, {"sample_id", "variation_id"});
+
+        CountHandles ch;
+        ch.row.sample_id = c.sid;
+        ch.row.variation_id = c.vid;
+        ch.row.beam_id = c.bid;
+        ch.row.period_id = c.pid;
+        ch.row.stage_id = c.stg;
+        ch.row.origin_id = c.oid;
+        ch.row.sample_key = c.sk;
+        ch.row.variation = c.vlab;
+        ch.row.beam = c.beam;
+        ch.row.period = c.period;
+        ch.row.stage = c.stage;
+        ch.row.origin = c.origin;
+
+        ch.n_total = view.Count();
+        ch.n_base = view.Filter("base_sel").Count();
+        counts.emplace_back(std::move(ch));
+    }
+
+#if ROOT_VERSION_CODE >= ROOT_VERSION(6, 24, 00)
+    std::vector<ROOT::RDF::RResultHandle> handles;
+    handles.reserve(1 + counts.size() * 2);
+    handles.push_back(snap.GetHandle());
+    for (auto &ch : counts) {
+        handles.push_back(ch.n_total.GetHandle());
+        handles.push_back(ch.n_base.GetHandle());
+    }
+    ROOT::RDF::RunGraphs(handles);
+#else
+    snap.GetValue();
+    for (auto &ch : counts) {
+        ch.n_total.GetValue();
+        ch.n_base.GetValue();
+    }
+#endif
+
+    std::vector<CutflowRow> cutflow;
+    cutflow.reserve(counts.size());
+    for (auto &ch : counts) {
+        ch.row.n_total = static_cast<unsigned long long>(*ch.n_total);
+        ch.row.n_base = static_cast<unsigned long long>(*ch.n_base);
+        cutflow.emplace_back(std::move(ch.row));
+    }
+
+    {
+        ImplicitMTGuard imt_guard;
+        std::unique_ptr<TFile> f(TFile::Open(output_file.c_str(), "UPDATE"));
+        if (!f || f->IsZombie()) {
+            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen output for metadata:", output_file);
+        }
+
+        if (auto *t = dynamic_cast<TTree *>(f->Get("events"))) {
+            if (t->GetBranch("rsub_key") && t->GetBranch("evt")) {
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Building TTree index (rsub_key, evt)");
+                t->BuildIndex("rsub_key", "evt");
+                t->Write("", TObject::kOverwrite);
+            }
+        }
+
+        this->writeSnapshotMetadata(*f, dicts, cutflow);
+    }
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
@@ -670,7 +481,8 @@ void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
     }
 }
 
-void SnapshotPipelineBuilder::writeSnapshotMetadata(TFile &output_file) const {
+void SnapshotPipelineBuilder::writeSnapshotMetadata(TFile &output_file, const ProvenanceDicts &dicts,
+                                                    const std::vector<CutflowRow> &cutflow) const {
     ImplicitMTGuard imt_guard;
 
     TDirectory *meta_dir = output_file.GetDirectory("meta");
@@ -683,81 +495,215 @@ void SnapshotPipelineBuilder::writeSnapshotMetadata(TFile &output_file) const {
     }
     meta_dir->cd();
 
-    TTree totals_tree("totals", "Exposure totals");
-    double total_pot = total_pot_;
-    long total_triggers = total_triggers_;
-    totals_tree.Branch("total_pot", &total_pot);
-    totals_tree.Branch("total_triggers", &total_triggers);
-    totals_tree.Fill();
-    totals_tree.Write("", TObject::kOverwrite);
-
-    TTree samples_tree("samples", "Per-sample exposure summary");
-    std::string tree_path;
-    std::string sample_key_value;
-    std::string beam;
-    std::string run_period;
-    std::string relative_path;
-    std::string variation_label;
-    std::string stage_name;
-    std::string origin_label;
-    double sample_pot;
-    long sample_triggers;
-
-    samples_tree.Branch("tree_path", &tree_path);
-    samples_tree.Branch("sample_key", &sample_key_value);
-    samples_tree.Branch("beam", &beam);
-    samples_tree.Branch("run_period", &run_period);
-    samples_tree.Branch("relative_path", &relative_path);
-    samples_tree.Branch("variation", &variation_label);
-    samples_tree.Branch("stage_name", &stage_name);
-    samples_tree.Branch("origin", &origin_label);
-    samples_tree.Branch("sample_pot", &sample_pot);
-    samples_tree.Branch("sample_triggers", &sample_triggers);
-
-    for (auto const &[key, sample] : frames_) {
-        const auto *rc = this->getRunConfigForSample(key);
-        const std::string sample_beam = rc ? rc->beamMode() : std::string{};
-        const std::string sample_period = rc ? rc->runPeriod() : std::string{};
-        const std::string &sample_stage = sample.stageName();
-
-        beam = sample_beam;
-        run_period = sample_period;
-        tree_path = nominalTreePath(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
-        sample_key_value = key.str();
-        relative_path = sample.relativePath();
-        variation_label = "nominal";
-        stage_name = sample_stage;
-        origin_label = originToString(sample.sampleOrigin());
-        sample_pot = sample.pot();
-        sample_triggers = sample.triggers();
-        samples_tree.Fill();
-
-        for (const auto &variation_def : sample.variationDescriptors()) {
-            const auto *variation_rc = this->getRunConfigForSample(variation_def.sample_key);
-            const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
-            const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
-            const std::string &variation_stage =
-                variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
-
-            tree_path = variationTreePath(key, variation_def, variation_beam, variation_period,
-                                          sample.sampleOrigin(), variation_stage);
-            sample_key_value = variation_def.sample_key.str();
-            relative_path = variation_def.relative_path;
-            variation_label = variation_def.variation_label.empty() ? variationToKey(variation_def.variation)
-                                                                    : variation_def.variation_label;
-            stage_name = variation_stage;
-            origin_label = originToString(sample.sampleOrigin());
-            sample_pot = variation_def.pot;
-            sample_triggers = variation_def.triggers;
-            beam = variation_beam;
-            run_period = variation_period;
-
-            samples_tree.Fill();
-        }
+    {
+        TTree v("schema", "schema");
+        int version = 1;
+        v.Branch("version", &version);
+        v.Fill();
+        v.Write("", TObject::kOverwrite);
     }
 
-    samples_tree.Write("", TObject::kOverwrite);
+    {
+        TTree totals_tree("totals", "Exposure totals");
+        double total_pot = total_pot_;
+        long total_triggers = total_triggers_;
+        totals_tree.Branch("total_pot", &total_pot);
+        totals_tree.Branch("total_triggers", &total_triggers);
+        totals_tree.Fill();
+        totals_tree.Write("", TObject::kOverwrite);
+    }
+
+    auto write_string_dict = [&](const char *name, const auto &map_in) {
+        std::vector<std::pair<uint32_t, std::string>> rows;
+        rows.reserve(map_in.size());
+        for (const auto &kv : map_in) {
+            rows.emplace_back(kv.second, kv.first);
+        }
+        std::sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+
+        TTree t(name, name);
+        uint32_t id;
+        std::string name_s;
+        t.Branch("id", &id);
+        t.Branch("name", &name_s);
+        for (auto &r : rows) {
+            id = r.first;
+            name_s = r.second;
+            t.Fill();
+        }
+        t.Write("", TObject::kOverwrite);
+    };
+
+    write_string_dict("beams", dicts.beam2id);
+    write_string_dict("periods", dicts.period2id);
+    write_string_dict("stages", dicts.stage2id);
+    write_string_dict("variations", dicts.var2id);
+
+    {
+        std::vector<std::pair<uint32_t, std::string>> rows;
+        rows.reserve(dicts.sample2id.size());
+        for (const auto &kv : dicts.sample2id) {
+            rows.emplace_back(kv.second, kv.first);
+        }
+        std::sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+
+        TTree t("samples_dict", "samples_dict");
+        uint32_t id;
+        std::string key;
+        t.Branch("id", &id);
+        t.Branch("key", &key);
+        for (auto &r : rows) {
+            id = r.first;
+            key = r.second;
+            t.Fill();
+        }
+        t.Write("", TObject::kOverwrite);
+    }
+
+    {
+        TTree t("origins", "origins");
+        uint8_t id;
+        std::string name_s;
+        t.Branch("id", &id);
+        t.Branch("name", &name_s);
+        auto write_one = [&](SampleOrigin o, const char *nm) {
+            auto it = dicts.origin2id.find(o);
+            if (it == dicts.origin2id.end()) {
+                return;
+            }
+            id = it->second;
+            name_s = nm;
+            t.Fill();
+        };
+        write_one(SampleOrigin::kData, "data");
+        write_one(SampleOrigin::kMonteCarlo, "mc");
+        write_one(SampleOrigin::kDirt, "dirt");
+        write_one(SampleOrigin::kExternal, "external");
+        t.Write("", TObject::kOverwrite);
+    }
+
+    {
+        TTree samples_tree("samples", "Per-sample exposure summary");
+        std::string tree_path;
+        std::string sample_key_value;
+        std::string beam;
+        std::string run_period;
+        std::string relative_path;
+        std::string variation_label;
+        std::string stage_name;
+        std::string origin_label;
+        double sample_pot;
+        long sample_triggers;
+
+        samples_tree.Branch("tree_path", &tree_path);
+        samples_tree.Branch("sample_key", &sample_key_value);
+        samples_tree.Branch("beam", &beam);
+        samples_tree.Branch("run_period", &run_period);
+        samples_tree.Branch("relative_path", &relative_path);
+        samples_tree.Branch("variation", &variation_label);
+        samples_tree.Branch("stage_name", &stage_name);
+        samples_tree.Branch("origin", &origin_label);
+        samples_tree.Branch("sample_pot", &sample_pot);
+        samples_tree.Branch("sample_triggers", &sample_triggers);
+
+        for (const auto &[key, sample] : frames_) {
+            const auto *rc = this->getRunConfigForSample(key);
+            const std::string sample_beam = rc ? rc->beamMode() : std::string{};
+            const std::string sample_period = rc ? rc->runPeriod() : std::string{};
+            const std::string &sample_stage = sample.stageName();
+
+            tree_path = "events";
+            sample_key_value = key.str();
+            beam = sample_beam;
+            run_period = sample_period;
+            relative_path = sample.relativePath();
+            variation_label = "nominal";
+            stage_name = sample_stage;
+            origin_label = originToString(sample.sampleOrigin());
+            sample_pot = sample.pot();
+            sample_triggers = sample.triggers();
+            samples_tree.Fill();
+
+            for (const auto &variation_def : sample.variationDescriptors()) {
+                const auto *variation_rc = this->getRunConfigForSample(variation_def.sample_key);
+                const std::string variation_beam = variation_rc ? variation_rc->beamMode() : sample_beam;
+                const std::string variation_period = variation_rc ? variation_rc->runPeriod() : sample_period;
+                const std::string &variation_stage =
+                    variation_def.stage_name.empty() ? sample_stage : variation_def.stage_name;
+
+                tree_path = "events";
+                sample_key_value = variation_def.sample_key.str();
+                relative_path = variation_def.relative_path;
+                variation_label = variation_def.variation_label.empty()
+                                       ? variationToKey(variation_def.variation)
+                                       : variation_def.variation_label;
+                stage_name = variation_stage;
+                origin_label = originToString(sample.sampleOrigin());
+                sample_pot = variation_def.pot;
+                sample_triggers = variation_def.triggers;
+                beam = variation_beam;
+                run_period = variation_period;
+
+                samples_tree.Fill();
+            }
+        }
+
+        samples_tree.Write("", TObject::kOverwrite);
+    }
+
+    {
+        TTree t("cutflow", "Cutflow per sample/variation");
+        uint32_t sample_id;
+        uint16_t variation_id;
+        uint16_t beam_id;
+        uint16_t period_id;
+        uint16_t stage_id;
+        uint8_t origin_id;
+        unsigned long long n_total;
+        unsigned long long n_base;
+        std::string sample_key;
+        std::string variation;
+        std::string beam;
+        std::string period;
+        std::string stage;
+        std::string origin;
+
+        t.Branch("sample_id", &sample_id);
+        t.Branch("variation_id", &variation_id);
+        t.Branch("beam_id", &beam_id);
+        t.Branch("period_id", &period_id);
+        t.Branch("stage_id", &stage_id);
+        t.Branch("origin_id", &origin_id);
+        t.Branch("n_total", &n_total);
+        t.Branch("n_base", &n_base);
+        t.Branch("sample_key", &sample_key);
+        t.Branch("variation", &variation);
+        t.Branch("beam", &beam);
+        t.Branch("period", &period);
+        t.Branch("stage", &stage);
+        t.Branch("origin", &origin);
+
+        for (const auto &row : cutflow) {
+            sample_id = row.sample_id;
+            variation_id = row.variation_id;
+            beam_id = row.beam_id;
+            period_id = row.period_id;
+            stage_id = row.stage_id;
+            origin_id = row.origin_id;
+            n_total = row.n_total;
+            n_base = row.n_base;
+            sample_key = row.sample_key;
+            variation = row.variation;
+            beam = row.beam;
+            period = row.period;
+            stage = row.stage;
+            origin = row.origin;
+            t.Fill();
+        }
+        t.Write("", TObject::kOverwrite);
+    }
+
     output_file.cd();
 }
 
-}
+} // namespace proc
