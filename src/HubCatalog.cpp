@@ -104,13 +104,10 @@ std::vector<std::string> HubCatalog::queryShardPaths(const std::string &selectio
         return paths;
     }
 
-    ROOT::RDF::RDataFrame df(*catalog_tree_);
-    auto node = df;
-    if (!selection.empty()) {
-        node = node.Filter(selection);
-    }
-
-    auto take_paths = node.Take<std::string>("shard_path");
+    ROOT::RDataFrame df(*catalog_tree_);
+    auto take_paths = selection.empty()
+                            ? df.Take<std::string>("shard_path")
+                            : df.Filter(selection).Take<std::string>("shard_path");
     paths = *take_paths;
     return paths;
 }
