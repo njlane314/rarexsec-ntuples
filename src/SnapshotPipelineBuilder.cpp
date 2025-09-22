@@ -28,6 +28,7 @@
 #include <rarexsec/LoggerUtils.h>
 #include <rarexsec/MuonSelectionProcessor.h>
 #include <rarexsec/PreselectionProcessor.h>
+#include <rarexsec/ProcessorPipeline.h>
 #include <rarexsec/ReconstructionProcessor.h>
 #include <rarexsec/SampleTypes.h>
 #include <rarexsec/TruthChannelProcessor.h>
@@ -647,7 +648,9 @@ void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
             continue;
         }
 
-        auto pipeline = this->chainProcessorStages(
+        auto pipeline = std::make_unique<ProcessorPipeline<WeightProcessor, TruthChannelProcessor, BlipProcessor,
+                                                            MuonSelectionProcessor, ReconstructionProcessor,
+                                                            PreselectionProcessor>>(
             std::make_unique<WeightProcessor>(sample_json, total_pot_, total_triggers_),
             std::make_unique<TruthChannelProcessor>(), std::make_unique<BlipProcessor>(),
             std::make_unique<MuonSelectionProcessor>(), std::make_unique<ReconstructionProcessor>(),

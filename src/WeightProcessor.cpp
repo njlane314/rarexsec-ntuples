@@ -79,7 +79,7 @@ ROOT::RDF::RNode WeightProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) 
         }
     }
 
-    return next_ ? next_->process(proc_df, st) : proc_df;
+    return proc_df;
 }
 
 }

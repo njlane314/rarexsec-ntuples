@@ -77,7 +77,7 @@ ROOT::RDF::RNode BlipProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) co
         proc_df = proc_df.Define("blip_distance_to_vertex", missingVertexDistances, {"blip_x"});
     }
 
-    return next_ ? next_->process(proc_df, st) : proc_df;
+    return proc_df;
 }
 
 }

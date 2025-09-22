@@ -204,7 +204,7 @@ ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigi
                     .Define("is_truth_signal", truth_column(&TruthDerived::is_truth_signal), {"truth_derived"})
                     .Define("pure_slice_signal", truth_column(&TruthDerived::pure_slice_signal), {"truth_derived"});
 
-    return next_ ? next_->process(out, st) : out;
+    return out;
 }
 
 ROOT::RDF::RNode TruthChannelProcessor::processData(ROOT::RDF::RNode df, SampleOrigin st) const {
@@ -224,7 +224,7 @@ ROOT::RDF::RNode TruthChannelProcessor::processData(ROOT::RDF::RNode df, SampleO
                            .Define("is_truth_signal", []() { return false; })
                            .Define("pure_slice_signal", []() { return false; });
 
-    return next_ ? next_->process(defaults_df, st) : defaults_df;
+    return defaults_df;
 }
 
 }
