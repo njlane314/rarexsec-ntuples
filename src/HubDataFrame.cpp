@@ -5,7 +5,11 @@
 #include <algorithm>
 #include <filesystem>
 #include <stdexcept>
+#include <string>
 #include <vector>
+
+#include <ROOT/RDataFrame.hxx>
+#include <TChain.h>
 
 namespace {
 constexpr const char *kCatalogTreeName = "shards";
@@ -20,7 +24,7 @@ ROOT::RDF::RNode HubDataFrame::query(const std::string &beam,
                                       const std::string &variation,
                                       const std::string &origin,
                                       const std::string &stage) {
-    ROOT::RDF::RDataFrame catalog_df(kCatalogTreeName, hub_path_);
+    ROOT::RDataFrame catalog_df(kCatalogTreeName, hub_path_);
     auto filtered = catalog_df.Filter(
         [&](const std::string &cat_beam, const std::string &cat_period, const std::string &cat_variation,
             const std::string &cat_origin, const std::string &cat_stage) {
@@ -72,7 +76,7 @@ ROOT::RDF::RNode HubDataFrame::query(const std::string &beam,
     }
 
     log::info("HubDataFrame", "Loaded", shard_paths.size(), "shards for", beam, period, variation, origin, stage);
-    ROOT::RDF::RDataFrame df(*current_chain_);
+    ROOT::RDataFrame df(*current_chain_);
     return df;
 }
 
