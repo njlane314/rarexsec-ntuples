@@ -15,9 +15,14 @@ namespace proc {
 class ShardWriter {
   public:
     struct ShardConfig {
-        std::filesystem::path output_dir = std::filesystem::path{"shards"};
-        int compression_algo = ROOT::kZSTD;
-        int compression_level = 3;
+        ShardConfig()
+            : output_dir(std::filesystem::path{"shards"}),
+              compression_algo(ROOT::kZSTD),
+              compression_level(3) {}
+
+        std::filesystem::path output_dir;
+        int compression_algo;
+        int compression_level;
     };
 
     explicit ShardWriter(const ShardConfig &config = ShardConfig{});
