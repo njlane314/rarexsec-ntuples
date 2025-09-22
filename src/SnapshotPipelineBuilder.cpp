@@ -459,8 +459,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             if (auto canvases = gROOT->GetListOfCanvases()) {
                 canvases->Delete();
             }
-            if (gDirectory != nullptr) {
-                if (auto dir_list = gDirectory->GetList()) {
+            if (TDirectory *dir = gDirectory) {
+                if (auto dir_list = dir->GetList()) {
                     dir_list->Delete();
                 }
             }
