@@ -6,6 +6,7 @@
 #include "TObject.h"
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
+#include "RVersion.h"
 
 #include <algorithm>
 #include <cctype>
@@ -426,7 +427,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         base_opt.fAutoFlush = -64 * 1024 * 1024;
     }
     if constexpr (snapshot_detail::has_basket_size_v<ROOT::RDF::RSnapshotOptions>) {
+#if defined(ROOT_VERSION_CODE) && ROOT_VERSION_CODE < ROOT_VERSION(6, 28, 0)
         base_opt.fBasketSize = 2 * 1024 * 1024;
+#endif
     }
     base_opt.fSplitLevel = 0;
     if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
@@ -463,7 +466,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
         r.n_total = node.Count();
         auto node_u = node.Define("base_sel_u64", "static_cast<ULong64_t>(base_sel)");
-        r.n_base = node_u.Sum("base_sel_u64");
+        r.n_base = node_u.Sum<ULong64_t>("base_sel_u64");
 
         auto opt = base_opt;
         opt.fMode = first_snapshot ? "RECREATE" : "UPDATE";
