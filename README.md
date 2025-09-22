@@ -110,34 +110,66 @@ run tokens supplied as separate arguments are all valid.
 
 ## Snapshot layout
 
-Snapshots follow a consistent directory structure inside the output ROOT file:
+Every snapshot (analysis or training) writes two top-level directories inside
+the ROOT file:
 
 ```text
 snapshot.root
 ├── samples/
-│   └── <beam-mode>/
+│   └── <beam>/
 │       └── <run-period>/
 │           └── <origin>/
 │               └── [<stage>/]
-│                   └── <sample>/
+│                   └── <sample-key>/
 │                       ├── nominal/
 │                       │   └── events (TTree)
-│                       └── variations/
-│                           └── <variation>/
-│                               └── events (TTree)
+│                       └── <variation-label>/
+│                           └── events (TTree)
 └── meta/
+    ├── schema (TTree)
     ├── totals (TTree)
-    └── samples (TTree)
+    ├── beams (TTree)
+    ├── periods (TTree)
+    ├── stages (TTree)
+    ├── variations (TTree)
+    ├── origins (TTree)
+    ├── samples_dict (TTree)
+    ├── samples (TTree)
+    └── cutflow (TTree)
 ```
 
-- `beam-mode` and `run-period` ensure samples from different NuMI beam
-  configurations never clash.
-- The `origin` component reflects the catalogue entry (`mc`, `data`, `dirt`,
-  `ext`, ...). A `stage` directory is only inserted when the sample or
-  variation advertises a processing stage name.
-- `meta/totals` stores the integrated POT and trigger counts across all samples.
-- `meta/samples` lists each nominal and detector-variation dataset together with
-  the resolved `tree_path`, beam, and run period.
+Directory placeholders resolve as follows:
+
+- `<beam>` – beam label drawn from the run configuration (for example
+  `numi-fhc`).
+- `<run-period>` – the period token (for example `run1`). Ranges requested on
+  the command line expand to distinct entries.
+- `<origin>` – the catalogue origin (`mc`, `data`, `dirt`, `ext`, ...).
+- `<stage>` – optional processing stage (for example `selection_ext`). The
+  directory is omitted when no stage is defined.
+- `<sample-key>` – the configured `sample_key` string.
+- `<variation-label>` – either the explicit `variation_label` or the canonical
+  detector variation key. The nominal tree is always stored under `nominal`.
+
+Every `events` tree carries the curated snapshot columns together with the
+provenance helpers (`sample_id`, `beam_id`, `period_id`, `stage_id`,
+`variation_id`, `origin_id`, ...). These identifiers link the payload to the
+metadata tables below.
+
+`meta/` summarises the file contents:
+
+- `schema` stores a single integer version tag for downstream compatibility
+  checks.
+- `totals` reports the integrated POT and trigger counts accumulated over the
+  processed runs.
+- `beams`, `periods`, `stages`, and `variations` map each identifier written
+  into the event trees back to its human-readable label.
+- `origins` enumerates the supported origins (`data`, `mc`, `ext`, `dirt`).
+- `samples_dict` maps `sample_id` to the base `sample_key`.
+- `samples` records the resolved tree path for each nominal and variation
+  dataset together with exposure metrics and identifier columns.
+- `cutflow` lists per-sample and per-variation entry counts both before and
+  after the `base_sel` filter, aligned with the identifiers above.
 
 ## Explore snapshot metadata with ROOT
 
