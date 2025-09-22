@@ -178,19 +178,31 @@ ROOT::RDF::RNode TruthChannelProcessor::process(ROOT::RDF::RNode df, SampleOrigi
          "neutrino_purity_from_pfp",
          "neutrino_completeness_from_pfp"});
 
-    auto out = with_truth.Define("in_fiducial", "truth_derived.in_fiducial")
-                    .Define("mc_n_strange", "truth_derived.mc_n_strange")
-                    .Define("mc_n_pion", "truth_derived.mc_n_pion")
-                    .Define("mc_n_proton", "truth_derived.mc_n_proton")
-                    .Define("interaction_mode_category", "truth_derived.interaction_mode_category")
+    const auto truth_column = [](auto member_ptr) {
+        return [member_ptr](const TruthDerived &truth) {
+            const auto value = truth.*member_ptr;
+            return value;
+        };
+    };
+
+    auto out = with_truth.Define("in_fiducial", truth_column(&TruthDerived::in_fiducial), {"truth_derived"})
+                    .Define("mc_n_strange", truth_column(&TruthDerived::mc_n_strange), {"truth_derived"})
+                    .Define("mc_n_pion", truth_column(&TruthDerived::mc_n_pion), {"truth_derived"})
+                    .Define("mc_n_proton", truth_column(&TruthDerived::mc_n_proton), {"truth_derived"})
+                    .Define("interaction_mode_category",
+                            truth_column(&TruthDerived::interaction_mode_category),
+                            {"truth_derived"})
                     .Define("inclusive_strange_channel_category",
-                            "truth_derived.inclusive_strange_channel_category")
+                            truth_column(&TruthDerived::inclusive_strange_channel_category),
+                            {"truth_derived"})
                     .Define("exclusive_strange_channel_category",
-                            "truth_derived.exclusive_strange_channel_category")
+                            truth_column(&TruthDerived::exclusive_strange_channel_category),
+                            {"truth_derived"})
                     .Define("channel_definition_category",
-                            "truth_derived.channel_definition_category")
-                    .Define("is_truth_signal", "truth_derived.is_truth_signal")
-                    .Define("pure_slice_signal", "truth_derived.pure_slice_signal");
+                            truth_column(&TruthDerived::channel_definition_category),
+                            {"truth_derived"})
+                    .Define("is_truth_signal", truth_column(&TruthDerived::is_truth_signal), {"truth_derived"})
+                    .Define("pure_slice_signal", truth_column(&TruthDerived::pure_slice_signal), {"truth_derived"});
 
     return next_ ? next_->process(out, st) : out;
 }
