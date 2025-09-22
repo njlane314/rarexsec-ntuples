@@ -152,9 +152,16 @@ int main(int argc, char **argv) {
                                                    ? proc::FilterExpression{*options.selection}
                                                    : proc::nuMuCCSelection();
 
+        const std::string hub_suffix = ".hub.root";
+        if (output_file.size() < hub_suffix.size() ||
+            output_file.compare(output_file.size() - hub_suffix.size(), hub_suffix.size(), hub_suffix) != 0) {
+            proc::log::info("snapshot-training", "[warning]",
+                            "Hub outputs conventionally use the .hub.root suffix:", output_file);
+        }
+
         builder.snapshot(selection, output_file, columns);
-        proc::log::info("snapshot-training", "Training pool snapshot written to", output_file);
-        std::cout << "Training pool generated at: " << output_file << std::endl;
+        proc::log::info("snapshot-training", "Training hub snapshot written to", output_file);
+        std::cout << "Training hub generated at: " << output_file << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Processing failed: " << e.what() << std::endl;
         return 1;

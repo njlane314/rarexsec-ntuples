@@ -68,7 +68,7 @@ relative file paths.
     numi-fhc \
     run1-run3 \
     [optional-selection] \
-    [optional-output.root]
+    [optional-output.hub.root]
 ```
 
 - Arguments 1–3 select the catalogue, beam, and run periods. Beam modes follow
@@ -79,11 +79,13 @@ relative file paths.
   example `... run1 run2 run3 ...`) without quoting.
 - Provide a filter expression to `optional-selection` to trim events with
   `RDataFrame::Filter` syntax.
-- Supply an output file to snapshot the selected events. When omitted the tool
-  prints the available branches for each configured sample.
-- Include details such as the beam, period, and selection in the output file
+- Supply an output hub file to snapshot the selected events. When omitted the
+  tool prints the available branches for each configured sample. Hubs use the
+  `.hub.root` suffix and create a sibling `shards/` directory that mirrors the
+  input samples as shard files.
+- Include details such as the beam, period, and selection in the output hub
   name to keep it self-descriptive; for example,
-  `snapshot_fhc_r1-3_nuepre.root`.
+  `snapshot_fhc_r1-3_nuepre.hub.root`.
 - Snapshots include only the curated branch list defined in
   `requestedSnapshotColumns()` within `app/snapshot_analysis.cpp`.
 - ROOT's implicit multi-threading is enabled automatically with the maximum
@@ -97,135 +99,58 @@ relative file paths.
     numi-fhc \
     all \
     [optional-selection] \
-    output.root
+    output.hub.root
 ```
 
 The training pool command records the event identifiers, weights, truth-channel
-labels, and CNN-friendly image tensors while retaining the same snapshot layout
-as the snapshot analysis tool. It honours the same period syntax as
+labels, and CNN-friendly image tensors while retaining the same hub layout as
+the snapshot analysis tool. It honours the same period syntax as
 `snapshot-analysis`, so comma-separated lists (`run1,run2,run3`) or additional
 run tokens supplied as separate arguments are all valid.
 - ROOT's implicit multi-threading is enabled automatically with the maximum
   available threads.
 
-## Snapshot layout
+## Hub snapshots
 
-Every snapshot (analysis or training) writes two top-level directories inside
-the ROOT file:
+Hubs (`*.hub.root`) are lightweight catalogues that describe every shard produced for a snapshot. The hub file stores the metadata while the shard payloads live in a sibling `shards/` directory. Each shard corresponds to a single sample/variation pair, carrying the requested columns for that dataset without further splitting.
+
+### Catalogue contents
+
+- `shards` (TTree) – one row per shard with identifier fields (`sample_id`, `beam_id`, `period_id`, `variation_id`, `origin_id`), the relative shard location (`shard_path`), per-shard event counts, weight sums, exposure totals, and human-readable keys.
+- `hub_meta` (TTree) – key/value metadata entries. `provenance_dicts` preserves the dictionaries that map human-readable labels to the integer identifiers written into the shards, while `summary` stores the integrated POT and trigger totals for the complete hub.
+
+On disk the hub catalogue and shards appear as follows:
 
 ```text
-snapshot.root
-├── samples/
-│   └── <beam>/
-│       └── <run-period>/
-│           └── <origin>/
-│               └── [<stage>/]
-│                   └── <sample-key>/
-│                       ├── nominal/
-│                       │   └── events (TTree)
-│                       └── <variation-label>/
-│                           └── events (TTree)
-└── meta/
-    ├── schema (TTree)
-    ├── totals (TTree)
-    ├── beams (TTree)
-    ├── periods (TTree)
-    ├── stages (TTree)
-    ├── variations (TTree)
-    ├── origins (TTree)
-    ├── samples_dict (TTree)
-    ├── samples (TTree)
-    └── cutflow (TTree)
+snapshot_fhc_r1-3_nuepre.hub.root
+├── shards/
+│   ├── nue_fhc_nominal_0000.root
+│   └── nue_fhc_fluxup_0000.root
+└── (hub catalog containing the shards and hub_meta TTrees)
 ```
 
-Directory placeholders resolve as follows:
+### ROOT macro example
 
-- `<beam>` – beam label drawn from the run configuration (for example
-  `numi-fhc`).
-- `<run-period>` – the period token (for example `run1`). Ranges requested on
-  the command line expand to distinct entries.
-- `<origin>` – the catalogue origin (`mc`, `data`, `dirt`, `ext`, ...).
-- `<stage>` – optional processing stage (for example `selection_ext`). The
-  directory is omitted when no stage is defined.
-- `<sample-key>` – the configured `sample_key` string.
-- `<variation-label>` – either the explicit `variation_label` or the canonical
-  detector variation key. The nominal tree is always stored under `nominal`.
-
-Every `events` tree carries the curated snapshot columns together with the
-provenance helpers (`sample_id`, `beam_id`, `period_id`, `stage_id`,
-`variation_id`, `origin_id`, ...). These identifiers link the payload to the
-metadata tables below.
-
-`meta/` summarises the file contents:
-
-- `schema` stores a single integer version tag for downstream compatibility
-  checks.
-- `totals` reports the integrated POT and trigger counts accumulated over the
-  processed runs.
-- `beams`, `periods`, `stages`, and `variations` map each identifier written
-  into the event trees back to its human-readable label.
-- `origins` enumerates the supported origins (`data`, `mc`, `ext`, `dirt`).
-- `samples_dict` maps `sample_id` to the base `sample_key`.
-- `samples` records the resolved tree path for each nominal and variation
-  dataset together with exposure metrics and identifier columns.
-- `cutflow` lists per-sample and per-variation entry counts both before and
-  after the `base_sel` filter, aligned with the identifiers above.
-
-## Explore snapshot metadata with ROOT
-
-The snippet below iterates over the metadata summary, loads each nominal event
-TTree, and prints the entry counts. Save it as `rarexsec_snapshot_example.C` and
-run `root -l rarexsec_snapshot_example.C` to execute the helper:
+Save the snippet below as `hub_example.C` and execute `root -l hub_example.C` to analyse events straight from the hub catalogue:
 
 ```cpp
-#include <iostream>
-#include <string>
+#include <rarexsec/HubDataFrame.h>
 
-#include "TFile.h"
-#include "TTree.h"
+void hub_example() {
+    proc::HubDataFrame hub{"snapshot_fhc_r1-3_nuepre.hub.root"};
+    auto df = hub.query("numi-fhc", "run1", "nominal", "mc");
 
-void rarexsec_snapshot_example(const char *filename = "snapshot.root") {
-    TFile input(filename, "READ");
-    if (input.IsZombie()) {
-        std::cerr << "Could not open " << filename << "\n";
-        return;
-    }
-
-    auto *meta = static_cast<TTree *>(input.Get("meta/samples"));
-    if (!meta) {
-        std::cerr << "meta/samples tree is missing\n";
-        return;
-    }
-
-    std::string tree_path;
-    std::string sample_key;
-    meta->SetBranchAddress("tree_path", &tree_path);
-    meta->SetBranchAddress("sample_key", &sample_key);
-
-    for (Long64_t entry = 0; entry < meta->GetEntries(); ++entry) {
-        meta->GetEntry(entry);
-        if (tree_path.find("/nominal/") == std::string::npos) {
-            continue;
-        }
-
-        auto *events = static_cast<TTree *>(input.Get(tree_path.c_str()));
-        if (!events) {
-            std::cerr << "Tree not found: " << tree_path << "\n";
-            continue;
-        }
-        std::cout << sample_key << " -> " << tree_path << " has "
-                  << events->GetEntries() << " entries\n";
-    }
+    auto hist = df.Filter("base_sel")
+                  .Histo1D({"h_vtx_z", "Reconstructed vertex z", 120, 0., 600.},
+                           "reco_neutrino_vertex_z");
+    hist->Draw();
 }
 ```
 
-Use the same pattern to access detector variations (`variation` branch) or to
-aggregate POT across selected subsets.
+The `HubDataFrame` helper resolves the shard catalogue, builds the underlying `TChain`, and hands back an `RNode` that behaves exactly like the dataframe returned by the snapshot pipeline.
 
 ## ROOT macro quickstart
 
 ```bash
-root -l rarexsec_snapshot_example.C
-root -l app/plot_example.C
-root -l app/print_root_structure.C
+root -l hub_example.C
 ```
