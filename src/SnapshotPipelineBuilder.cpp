@@ -6,7 +6,6 @@
 #include "TTree.h"
 #include "TObject.h"
 #include "ROOT/RDataFrame.hxx"
-#include "ROOT/RDF/RResultHandle.hxx"
 #include "ROOT/RDFHelpers.hxx"
 
 #include <algorithm>
