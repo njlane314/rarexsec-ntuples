@@ -324,8 +324,6 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         return;
     }
 
-    auto big = ROOT::RDF::Concatenate(nodes);
-
     // Final columns (payload + provenance + helpers)
     std::vector<std::string> final_cols = requested;
     final_cols.insert(final_cols.end(),
@@ -333,28 +331,23 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                        "origin_id",      "event_uid",    "rsub_key",   "base_sel",   "w_nom",
                        "is_mc",          "is_nominal",   "sampvar_uid", "sample_pot", "sample_triggers"});
 
-    ROOT::RDF::RSnapshotOptions opt;
-    opt.fMode = "RECREATE";
-    opt.fLazy = false;
-    opt.fCompressionSettings = ROOT::CompressionSettings(ROOT::kZSTD, 3);
-#if ROOT_VERSION_CODE >= ROOT_VERSION(6, 30, 0)
-    opt.fOverwriteIfExists = true;
-    // opt.fSnapshotSink = "RNTuple";
-#endif
+    ROOT::RDF::RSnapshotOptions base_opt;
+    base_opt.fMode = "RECREATE";
+    base_opt.fLazy = false;
+    base_opt.fCompressionAlgorithm = ROOT::kZSTD;
+    base_opt.fCompressionLevel = 3;
 
-    auto snap = big.Snapshot("events", output_file, final_cols, opt);
-
-    // Per-(sample, variation) cutflow counts sharing the same event loop
+    // Per-(sample, variation) results, one dataframe per node
     struct CountHandles {
         CutflowRow row;
+        ROOT::RDF::RResultPtr<ULong64_t> snapshot;
         ROOT::RDF::RResultPtr<ULong64_t> n_total;
         ROOT::RDF::RResultPtr<ULong64_t> n_base;
     };
     std::vector<CountHandles> counts;
     counts.reserve(combos.size());
-    for (const auto &c : combos) {
-        auto pass_combo = [sid = c.sid, vid = c.vid](uint32_t s, uint16_t v) { return s == sid && v == vid; };
-        auto view = big.Filter(pass_combo, {"sample_id", "variation_id"});
+    for (std::size_t idx = 0; idx < combos.size(); ++idx) {
+        const auto &c = combos[idx];
 
         CountHandles ch;
         ch.row.sample_id = c.sid;
@@ -370,27 +363,23 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         ch.row.stage = c.stage;
         ch.row.origin = c.origin;
 
-        ch.n_total = view.Count();
-        ch.n_base = view.Filter("base_sel").Count();
+        ROOT::RDF::RSnapshotOptions opt = base_opt;
+        if (idx > 0) {
+            opt.fMode = "UPDATE";
+        }
+
+        auto &node = nodes[idx];
+        ch.snapshot = node.Snapshot("events", output_file, final_cols, opt);
+        ch.n_total = node.Count();
+        ch.n_base = node.Filter("base_sel").Count();
         counts.emplace_back(std::move(ch));
     }
 
-#if ROOT_VERSION_CODE >= ROOT_VERSION(6, 24, 00)
-    std::vector<ROOT::RDF::RResultHandle> handles;
-    handles.reserve(1 + counts.size() * 2);
-    handles.push_back(snap.GetHandle());
     for (auto &ch : counts) {
-        handles.push_back(ch.n_total.GetHandle());
-        handles.push_back(ch.n_base.GetHandle());
-    }
-    ROOT::RDF::RunGraphs(handles);
-#else
-    snap.GetValue();
-    for (auto &ch : counts) {
+        ch.snapshot.GetValue();
         ch.n_total.GetValue();
         ch.n_base.GetValue();
     }
-#endif
 
     std::vector<CutflowRow> cutflow;
     cutflow.reserve(counts.size());
