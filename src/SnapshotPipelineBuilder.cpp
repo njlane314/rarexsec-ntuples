@@ -143,9 +143,11 @@ static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
     const bool has_sub = df.HasColumn("sub");
     const bool has_evt = df.HasColumn("evt");
     if (has_run && has_sub && has_evt) {
+        // Match the branch types exactly so ROOT does not attempt to read the
+        // underlying columns as unsigned long long values.
         df = df.Define(
                      "event_uid",
-                     [](auto run, auto sub, auto evt) {
+                     [](int run, int sub, int evt) -> ULong64_t {
                          return (static_cast<ULong64_t>(run) << 42) |
                                 (static_cast<ULong64_t>(sub) << 21) |
                                 static_cast<ULong64_t>(evt);  // [run|sub|evt]
@@ -153,7 +155,7 @@ static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
                      {"run", "sub", "evt"})
                  .Define(
                      "rsub_key",
-                     [](auto run, auto sub) {
+                     [](int run, int sub) -> ULong64_t {
                          return (static_cast<ULong64_t>(run) << 20) |
                                 static_cast<ULong64_t>(sub);
                      },
