@@ -70,7 +70,6 @@ std::string canonicaliseBeamName(const std::string &beam) {
     return trimmed;
 }
 
-// generic "intern"
 template <typename MapT, typename KeyT, typename IdT>
 static IdT intern(MapT &m, const KeyT &k) {
     auto it = m.find(k);
@@ -102,12 +101,16 @@ static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
     const bool has_sub = df.HasColumn("sub");
     const bool has_evt = df.HasColumn("evt");
     if (has_run && has_sub && has_evt) {
-        df = df.Define("event_uid", [](ULong64_t run, ULong64_t sub, ULong64_t evt) {
-            return (run << 42) | (sub << 21) | evt;
-        }, {"run", "sub", "evt"})
-                 .Define("rsub_key", [](ULong64_t run, ULong64_t sub) {
-                     return (run << 20) | sub;
-                 }, {"run", "sub"});
+        df = df.Define(
+                     "event_uid",
+                     [](ULong64_t run, ULong64_t sub, ULong64_t evt) {
+                         return (run << 42) | (sub << 21) | evt;  // [run|sub|evt]
+                     },
+                     {"run", "sub", "evt"})
+                 .Define(
+                     "rsub_key",
+                     [](ULong64_t run, ULong64_t sub) { return (run << 20) | sub; },
+                     {"run", "sub"});
     } else {
         df = df.Define("event_uid", []() { return 0ULL; })
                  .Define("rsub_key", []() { return 0ULL; });
@@ -132,6 +135,18 @@ static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
     }
 
     return df;
+}
+
+static ROOT::RDF::RNode defineDownstreamConvenience(ROOT::RDF::RNode df, uint32_t sample_id, uint16_t variation_id,
+                                                    bool is_mc, bool is_nominal, double sample_pot,
+                                                    long sample_triggers) {
+    const uint64_t svuid = (static_cast<uint64_t>(sample_id) << 16) | variation_id;
+    return df.Define("is_mc", [is_mc]() { return is_mc; })
+        .Define("is_nominal", [is_nominal]() { return is_nominal; })
+        .Define("sampvar_uid", [svuid]() { return svuid; })
+        .Define("sample_pot", [sample_pot]() { return sample_pot; })
+        .Define("sample_triggers",
+                [sample_triggers]() { return static_cast<ULong64_t>(sample_triggers); });
 }
 
 } // namespace
@@ -164,43 +179,21 @@ const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey 
 
 void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
                                        const std::vector<std::string> &columns) const {
-    log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Starting snapshot over", frames_.size(),
-              "samples to", output_file);
-    if (filter_expr.empty()) {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No filter expression supplied");
-    } else {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Filter expression:", filter_expr);
-    }
-
+    // Deduplicate requested payload columns
     std::vector<std::string> requested = columns;
     {
         std::unordered_set<std::string> seen;
         std::vector<std::string> tmp;
         tmp.reserve(requested.size());
-        for (auto &column : requested) {
-            if (seen.insert(column).second) {
-                tmp.emplace_back(std::move(column));
-            } else {
-                log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "Duplicate snapshot column", column,
-                          "will be ignored");
+        for (auto &c : requested) {
+            if (seen.insert(c).second) {
+                tmp.emplace_back(std::move(c));
             }
         }
         requested.swap(tmp);
     }
 
-    if (requested.empty()) {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No explicit column list provided");
-    } else {
-        std::ostringstream column_stream;
-        for (std::size_t i = 0; i < requested.size(); ++i) {
-            if (i != 0) {
-                column_stream << ", ";
-            }
-            column_stream << requested[i];
-        }
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Requested columns:", column_stream.str());
-    }
-
+    // Build provenance dictionaries
     ProvenanceDicts dicts;
     dicts.origin2id[SampleOrigin::kData] =
         intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kData);
@@ -211,24 +204,15 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     dicts.origin2id[SampleOrigin::kExternal] =
         intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kExternal);
 
+    // Build nodes
     std::vector<ROOT::RDF::RNode> nodes;
     nodes.reserve(frames_.size() * 2);
-
     struct Combo {
         uint32_t sid;
-        uint16_t vid;
-        uint16_t bid;
-        uint16_t pid;
-        uint16_t stg;
+        uint16_t vid, bid, pid, stg;
         uint8_t oid;
-        std::string sk;
-        std::string vlab;
-        std::string beam;
-        std::string period;
-        std::string stage;
-        std::string origin;
+        std::string sk, vlab, beam, period, stage, origin;
     };
-
     std::vector<Combo> combos;
     combos.reserve(frames_.size() * 4);
 
@@ -245,7 +229,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const uint16_t stg = intern<decltype(dicts.stage2id), std::string, uint16_t>(dicts.stage2id, stage);
         const uint16_t vnom = intern<decltype(dicts.var2id), std::string, uint16_t>(dicts.var2id, "nominal");
         const uint8_t oid = dicts.origin2id.at(origin);
+        const bool is_mc = (origin == SampleOrigin::kMonteCarlo);
 
+        // nominal
         {
             auto df = sample.nominalNode();
             if (!filter_expr.empty()) {
@@ -253,12 +239,15 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             }
             df = defineProvenanceIDs(df, sid, bid, pid, stg, vnom, oid);
             df = defineAnalysisAliases(df);
+            df = defineDownstreamConvenience(df, sid, vnom, is_mc, /*is_nominal*/ true, sample.pot(),
+                                             sample.triggers());
             nodes.emplace_back(df);
 
             combos.push_back(Combo{sid, vnom, bid, pid, stg, oid, key.str(), "nominal", beam, period, stage,
                                    originToString(origin)});
         }
 
+        // variations
         for (const auto &vd : sample.variationDescriptors()) {
             auto it = sample.variationNodes().find(vd.variation);
             if (it == sample.variationNodes().end()) {
@@ -282,6 +271,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             }
             vdf = defineProvenanceIDs(vdf, sid, vbid, vpid, vstg, vvid, oid);
             vdf = defineAnalysisAliases(vdf);
+            vdf = defineDownstreamConvenience(vdf, sid, vvid, is_mc, /*is_nominal*/ false, vd.pot, vd.triggers);
             nodes.emplace_back(vdf);
 
             combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, key.str(), variationLabelOrKey(vd), vbeam,
@@ -296,24 +286,12 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
     auto big = ROOT::RDF::Concatenate(nodes);
 
-    std::unordered_set<std::string> final_seen;
-    std::vector<std::string> final_cols;
-    final_cols.reserve(requested.size() + 10);
-    for (const auto &col : requested) {
-        if (final_seen.insert(col).second) {
-            final_cols.push_back(col);
-        }
-    }
-
-    const std::vector<std::string> extras = {
-        "sample_id",   "beam_id", "period_id", "stage_id",     "variation_id", "origin_id",
-        "event_uid",   "rsub_key", "base_sel",  "w_nom"
-    };
-    for (const auto &col : extras) {
-        if (final_seen.insert(col).second) {
-            final_cols.push_back(col);
-        }
-    }
+    // Final columns (payload + provenance + helpers)
+    std::vector<std::string> final_cols = requested;
+    final_cols.insert(final_cols.end(),
+                      {"sample_id",       "beam_id",      "period_id",  "stage_id",   "variation_id",
+                       "origin_id",      "event_uid",    "rsub_key",   "base_sel",   "w_nom",
+                       "is_mc",          "is_nominal",   "sampvar_uid", "sample_pot", "sample_triggers"});
 
     ROOT::RDF::RSnapshotOptions opt;
     opt.fMode = "RECREATE";
@@ -321,19 +299,19 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     opt.fCompressionSettings = ROOT::CompressionSettings(ROOT::kZSTD, 3);
 #if ROOT_VERSION_CODE >= ROOT_VERSION(6, 30, 0)
     opt.fOverwriteIfExists = true;
+    // opt.fSnapshotSink = "RNTuple";
 #endif
 
     auto snap = big.Snapshot("events", output_file, final_cols, opt);
 
+    // Per-(sample, variation) cutflow counts sharing the same event loop
     struct CountHandles {
         CutflowRow row;
         ROOT::RDF::RResultPtr<ULong64_t> n_total;
         ROOT::RDF::RResultPtr<ULong64_t> n_base;
     };
-
     std::vector<CountHandles> counts;
     counts.reserve(combos.size());
-
     for (const auto &c : combos) {
         auto pass_combo = [sid = c.sid, vid = c.vid](uint32_t s, uint16_t v) { return s == sid && v == vid; };
         auto view = big.Filter(pass_combo, {"sample_id", "variation_id"});
@@ -382,21 +360,20 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         cutflow.emplace_back(std::move(ch.row));
     }
 
+    // Write metadata + index
     {
         ImplicitMTGuard imt_guard;
         std::unique_ptr<TFile> f(TFile::Open(output_file.c_str(), "UPDATE"));
         if (!f || f->IsZombie()) {
             log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen output for metadata:", output_file);
         }
-
-        if (auto *t = dynamic_cast<TTree *>(f->Get("events"))) {
+        if (auto t = dynamic_cast<TTree *>(f->Get("events"))) {
             if (t->GetBranch("rsub_key") && t->GetBranch("evt")) {
                 log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Building TTree index (rsub_key, evt)");
                 t->BuildIndex("rsub_key", "evt");
                 t->Write("", TObject::kOverwrite);
             }
         }
-
         this->writeSnapshotMetadata(*f, dicts, cutflow);
     }
 }
