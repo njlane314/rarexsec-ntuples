@@ -254,6 +254,56 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
               "payload columns and filter", filter_description);
     log::info("SnapshotPipelineBuilder::snapshot", "Processing", frames_.size(), "samples");
 
+    if (!frames_.empty()) {
+        std::unordered_map<std::string, std::size_t> origin_counts;
+        std::unordered_map<std::string, std::size_t> stage_counts;
+        std::unordered_map<std::string, std::size_t> run_config_counts;
+        origin_counts.reserve(frames_.size());
+        stage_counts.reserve(frames_.size());
+        run_config_counts.reserve(frames_.size());
+
+        for (const auto &[sample_key, sample] : frames_) {
+            ++origin_counts[proc::originToString(sample.sampleOrigin())];
+
+            const std::string stage_label = sample.stageName().empty() ? std::string{"<none>"} : sample.stageName();
+            ++stage_counts[stage_label];
+
+            std::string run_label{"<unmapped>"};
+            if (const auto *rc = this->getRunConfigForSample(sample_key)) {
+                run_label = rc->label();
+            }
+            ++run_config_counts[run_label];
+        }
+
+        auto log_count_map = [](std::string_view heading,
+                                 const std::unordered_map<std::string, std::size_t> &counts) {
+            if (counts.empty()) {
+                return;
+            }
+            std::vector<std::pair<std::string, std::size_t>> sorted_entries;
+            sorted_entries.reserve(counts.size());
+            for (const auto &entry : counts) {
+                sorted_entries.emplace_back(entry.first, entry.second);
+            }
+            std::sort(sorted_entries.begin(), sorted_entries.end(),
+                      [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
+
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", heading);
+            for (const auto &[label, count] : sorted_entries) {
+                const char *sample_word = (count == 1) ? "sample" : "samples";
+                std::ostringstream entry_message;
+                entry_message << "  - " << label << " (" << count << ' ' << sample_word << ')';
+                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", entry_message.str());
+            }
+        };
+
+        log_count_map("Sample distribution by origin:", origin_counts);
+        log_count_map("Sample distribution by stage:", stage_counts);
+        log_count_map("Sample distribution by run configuration:", run_config_counts);
+    } else {
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No samples have been queued for processing.");
+    }
+
     // Build provenance dictionaries
     ProvenanceDicts dicts;
     dicts.origin2id[SampleOrigin::kData] =
