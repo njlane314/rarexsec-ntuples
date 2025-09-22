@@ -145,13 +145,20 @@ static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
     if (has_run && has_sub && has_evt) {
         df = df.Define(
                      "event_uid",
-                     [](ULong64_t run, ULong64_t sub, ULong64_t evt) {
-                         return (run << 42) | (sub << 21) | evt;  // [run|sub|evt]
+                     [](auto run, auto sub, auto evt) {
+                         const auto run_u = static_cast<ULong64_t>(run);
+                         const auto sub_u = static_cast<ULong64_t>(sub);
+                         const auto evt_u = static_cast<ULong64_t>(evt);
+                         return (run_u << 42) | (sub_u << 21) | evt_u;  // [run|sub|evt]
                      },
                      {"run", "sub", "evt"})
                  .Define(
                      "rsub_key",
-                     [](ULong64_t run, ULong64_t sub) { return (run << 20) | sub; },
+                     [](auto run, auto sub) {
+                         const auto run_u = static_cast<ULong64_t>(run);
+                         const auto sub_u = static_cast<ULong64_t>(sub);
+                         return (run_u << 20) | sub_u;
+                     },
                      {"run", "sub"});
     } else {
         df = df.Define("event_uid", []() { return 0ULL; })
