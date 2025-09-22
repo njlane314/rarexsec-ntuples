@@ -1,20 +1,16 @@
 #include <rarexsec/SnapshotPipelineBuilder.h>
 
-#include "TDirectory.h"
-#include "TFile.h"
-#include "TTree.h"
-#include "TObject.h"
 #include "ROOT/RDataFrame.hxx"
-#include "ROOT/RDFHelpers.hxx"
-#include "RVersion.h"
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <future>
+#include <iterator>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -25,57 +21,14 @@
 #include <rarexsec/MuonSelectionProcessor.h>
 #include <rarexsec/PreselectionProcessor.h>
 #include <rarexsec/ProcessorPipeline.h>
+#include <rarexsec/HubCatalog.h>
+#include <rarexsec/ShardWriter.h>
 #include <rarexsec/ReconstructionProcessor.h>
 #include <rarexsec/SampleTypes.h>
 #include <rarexsec/TruthChannelProcessor.h>
 #include <rarexsec/WeightProcessor.h>
 
 namespace {
-
-class ImplicitMTGuard {
-  public:
-    ImplicitMTGuard() : was_enabled_{ROOT::IsImplicitMTEnabled()} {
-        if (was_enabled_) {
-            ROOT::DisableImplicitMT();
-        }
-    }
-
-    ImplicitMTGuard(const ImplicitMTGuard &) = delete;
-    ImplicitMTGuard &operator=(const ImplicitMTGuard &) = delete;
-
-    ~ImplicitMTGuard() {
-        if (was_enabled_) {
-            ROOT::EnableImplicitMT();
-        }
-    }
-
-  private:
-    bool was_enabled_;
-};
-
-namespace snapshot_detail {
-template <typename T, typename = void>
-struct has_autoflush : std::false_type {};
-template <typename T>
-struct has_autoflush<T, std::void_t<decltype(std::declval<T &>().fAutoFlush)>> : std::true_type {};
-template <typename T>
-constexpr bool has_autoflush_v = has_autoflush<T>::value;
-
-template <typename T, typename = void>
-struct has_basket_size : std::false_type {};
-template <typename T>
-struct has_basket_size<T, std::void_t<decltype(std::declval<T &>().fBasketSize)>> : std::true_type {};
-template <typename T>
-constexpr bool has_basket_size_v = has_basket_size<T>::value;
-
-template <typename T, typename = void>
-struct has_overwrite : std::false_type {};
-template <typename T>
-struct has_overwrite<T, std::void_t<decltype(std::declval<T &>().fOverwriteIfExists)>> : std::true_type {};
-template <typename T>
-constexpr bool has_overwrite_v = has_overwrite<T>::value;
-} // namespace snapshot_detail
-
 std::string canonicaliseBeamName(const std::string &beam) {
     std::string trimmed = beam;
     const auto begin = trimmed.find_first_not_of(" \t\n\r");
@@ -109,46 +62,6 @@ static IdT intern(MapT &m, const KeyT &k) {
 
 static std::string variationLabelOrKey(const proc::VariationDescriptor &vd) {
     return vd.variation_label.empty() ? proc::variationToKey(vd.variation) : vd.variation_label;
-}
-
-static void appendPathSegment(std::string &path, std::string_view segment) {
-    if (segment.empty()) {
-        return;
-    }
-    if (!path.empty() && path.back() != '/') {
-        path.push_back('/');
-    }
-    path.append(segment.data(), segment.size());
-}
-
-static std::string nominalTreePath(const proc::SampleKey &key, const std::string &beam, const std::string &run_period,
-                                   proc::SampleOrigin origin, const std::string &stage_name) {
-    std::string path = "samples";
-    appendPathSegment(path, beam);
-    appendPathSegment(path, run_period);
-    const std::string origin_label = proc::originToString(origin);
-    appendPathSegment(path, origin_label);
-    appendPathSegment(path, stage_name);
-    appendPathSegment(path, key.str());
-    appendPathSegment(path, "nominal");
-    appendPathSegment(path, "events");
-    return path;
-}
-
-static std::string variationTreePath(const proc::SampleKey &key, const proc::VariationDescriptor &vd,
-                                     const std::string &beam, const std::string &run_period, proc::SampleOrigin origin,
-                                     const std::string &stage_name) {
-    std::string path = "samples";
-    appendPathSegment(path, beam);
-    appendPathSegment(path, run_period);
-    const std::string origin_label = proc::originToString(origin);
-    appendPathSegment(path, origin_label);
-    appendPathSegment(path, stage_name);
-    appendPathSegment(path, key.str());
-    const std::string variation_label = variationLabelOrKey(vd);
-    appendPathSegment(path, variation_label);
-    appendPathSegment(path, "events");
-    return path;
 }
 
 static ROOT::RDF::RNode defineProvenanceIDs(ROOT::RDF::RNode df, uint32_t sample_id, uint16_t beam_id,
@@ -323,12 +236,6 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     // Build nodes
     std::vector<ROOT::RDF::RNode> nodes;
     nodes.reserve(frames_.size() * 2);
-    struct Combo {
-        uint32_t sid;
-        uint16_t vid, bid, pid, stg;
-        uint8_t oid;
-        std::string sk, vlab, beam, period, stage, origin;
-    };
     std::vector<Combo> combos;
     combos.reserve(frames_.size() * 4);
 
@@ -364,8 +271,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                                              sample.triggers());
             nodes.emplace_back(df);
 
-            combos.push_back(Combo{sid, vnom, bid, pid, stg, oid, key.str(), "nominal", beam, period, stage,
-                                   originToString(origin)});
+            combos.push_back(Combo{sid, vnom, bid, pid, stg, oid, origin, key.str(), "nominal", beam, period,
+                                   stage, originToString(origin), sample.pot(), sample.triggers()});
         }
 
         // variations
@@ -399,8 +306,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             vdf = defineDownstreamConvenience(vdf, sid, vvid, is_mc, /*is_nominal*/ false, vd.pot, vd.triggers);
             nodes.emplace_back(vdf);
 
-            combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, key.str(), variation_label, vbeam, vperiod,
-                                   vstage, originToString(origin)});
+            combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, origin, key.str(), variation_label, vbeam,
+                                   vperiod, vstage, originToString(origin), vd.pot, vd.triggers});
         }
     }
 
@@ -418,102 +325,70 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                        "origin_id",      "event_uid",    "rsub_key",   "base_sel",   "w_nom",
                        "is_mc",          "is_nominal",   "sampvar_uid", "sample_pot", "sample_triggers"});
 
-    ROOT::RDF::RSnapshotOptions base_opt;
-    base_opt.fMode = "RECREATE";
-    base_opt.fLazy = false;
-    base_opt.fCompressionAlgorithm = ROOT::kLZ4;
-    base_opt.fCompressionLevel = 1;
-    if constexpr (snapshot_detail::has_autoflush_v<ROOT::RDF::RSnapshotOptions>) {
-        base_opt.fAutoFlush = -64 * 1024 * 1024;
-    }
-    if constexpr (snapshot_detail::has_basket_size_v<ROOT::RDF::RSnapshotOptions>) {
-#if defined(ROOT_VERSION_CODE) && ROOT_VERSION_CODE < ROOT_VERSION(6, 28, 0)
-        base_opt.fBasketSize = 2 * 1024 * 1024;
-#endif
-    }
-    base_opt.fSplitLevel = 0;
-    if constexpr (snapshot_detail::has_overwrite_v<ROOT::RDF::RSnapshotOptions>) {
-        base_opt.fOverwriteIfExists = true;
-    }
-
-    struct RowH {
-        CutflowRow row;
-        ROOT::RDF::RResultPtr<ULong64_t> n_total;
-        ROOT::RDF::RResultPtr<ULong64_t> n_base;
-    };
-
-    std::vector<RowH> rows;
-    rows.reserve(combos.size());
-
-    bool first_snapshot = true;
-    for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
-        auto &node = nodes[idx];
-        auto &c = combos[idx];
-
-        RowH r;
-        r.row.sample_id = c.sid;
-        r.row.variation_id = c.vid;
-        r.row.beam_id = c.bid;
-        r.row.period_id = c.pid;
-        r.row.stage_id = c.stg;
-        r.row.origin_id = c.oid;
-        r.row.sample_key = std::move(c.sk);
-        r.row.variation = std::move(c.vlab);
-        r.row.beam = std::move(c.beam);
-        r.row.period = std::move(c.period);
-        r.row.stage = std::move(c.stage);
-        r.row.origin = std::move(c.origin);
-
-        r.n_total = node.Count();
-        auto node_u = node.Define("base_sel_u64", "static_cast<ULong64_t>(base_sel)");
-        r.n_base = node_u.Sum<ULong64_t>("base_sel_u64");
-
-        auto opt = base_opt;
-        opt.fMode = first_snapshot ? "RECREATE" : "UPDATE";
-        first_snapshot = false;
-        auto snap = node.Snapshot("events", output_file, final_cols, opt);
-        snap.GetValue();
-
-        rows.emplace_back(std::move(r));
-    }
-
-    std::vector<CutflowRow> cutflow;
-    cutflow.reserve(rows.size());
-    for (auto &r : rows) {
-        r.n_total.GetValue();
-        r.n_base.GetValue();
-        r.row.n_total = static_cast<unsigned long long>(*r.n_total);
-        r.row.n_base = static_cast<unsigned long long>(*r.n_base);
-        log::info("SnapshotPipelineBuilder::snapshot", "Completed dataset - sample", r.row.sample_key,
-                  "variation", r.row.variation, "events processed:", r.row.n_total, "base selection:",
-                  r.row.n_base);
-        cutflow.emplace_back(std::move(r.row));
-    }
-
-    // Write metadata + index
-    {
-        log::info("SnapshotPipelineBuilder::snapshot", "Writing metadata tables to", output_file);
-        ImplicitMTGuard imt_guard;
-        std::unique_ptr<TFile> f(TFile::Open(output_file.c_str(), "UPDATE"));
-        if (!f || f->IsZombie()) {
-            log::fatal("SnapshotPipelineBuilder::snapshot", "Failed to reopen output for metadata:", output_file);
-        }
-        if (auto t = dynamic_cast<TTree *>(f->Get("events"))) {
-            if (t->GetBranch("rsub_key") && t->GetBranch("evt")) {
-                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "Building TTree index (rsub_key, evt)");
-                t->BuildIndex("rsub_key", "evt");
-                t->Write("", TObject::kOverwrite);
-            }
-        }
-        this->writeSnapshotMetadata(*f, dicts, cutflow);
-    }
-
-    log::info("SnapshotPipelineBuilder::snapshot", "Snapshot generation completed:", output_file);
+    snapshotToHub(output_file, final_cols, nodes, combos, dicts);
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
                                        const std::vector<std::string> &columns) const {
     this->snapshot(query.str(), output_file, columns);
+}
+
+void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
+                                            const std::vector<std::string> &final_columns,
+                                            std::vector<ROOT::RDF::RNode> &nodes,
+                                            const std::vector<Combo> &combos,
+                                            const ProvenanceDicts &dicts) const {
+    log::info("SnapshotPipelineBuilder", "Creating hub snapshot:", hub_path);
+
+    HubCatalog hub(hub_path, true);
+    hub.writeDictionaries(dicts);
+    hub.writeSummary(total_pot_, total_triggers_);
+
+    ShardWriter::ShardConfig shard_config;
+    const std::filesystem::path hub_dir = std::filesystem::absolute(std::filesystem::path(hub_path)).parent_path();
+    shard_config.output_dir = hub_dir / "shards";
+
+    ShardWriter writer(shard_config);
+
+    std::vector<std::future<std::vector<ShardEntry>>> futures;
+    futures.reserve(nodes.size());
+
+    for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
+        futures.push_back(std::async(std::launch::async, [&, idx]() {
+            ROOT::EnableImplicitMT(1);
+            auto node = nodes[idx];
+            const auto &combo = combos[idx];
+
+            log::info("SnapshotPipelineBuilder", "Materialising shard for", combo.sk, combo.vlab);
+
+            auto entries = writer.writeShards(node, combo.sk, combo.beam, combo.period, combo.vlab, combo.stage,
+                                              combo.origin_enum, combo.pot, combo.triggers, final_columns);
+
+            for (auto &entry : entries) {
+                entry.sample_id = combo.sid;
+                entry.beam_id = combo.bid;
+                entry.period_id = combo.pid;
+                entry.variation_id = combo.vid;
+                entry.origin_id = combo.oid;
+                entry.pot = combo.pot;
+                entry.triggers = combo.triggers;
+            }
+
+            return entries;
+        }));
+    }
+
+    std::vector<ShardEntry> all_entries;
+    for (auto &future : futures) {
+        auto entries = future.get();
+        all_entries.insert(all_entries.end(), std::make_move_iterator(entries.begin()),
+                           std::make_move_iterator(entries.end()));
+    }
+
+    hub.addShardEntries(all_entries);
+    hub.finalize();
+
+    log::info("SnapshotPipelineBuilder", "Created", all_entries.size(), "shards referenced in hub:", hub_path);
 }
 
 void SnapshotPipelineBuilder::printAllBranches() const {
@@ -599,206 +474,5 @@ void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
     }
 }
 
-void SnapshotPipelineBuilder::writeSnapshotMetadata(TFile &output_file,
-                                                    const ProvenanceDicts &dicts,
-                                                    const std::vector<CutflowRow> &cutflow) const {
-    ImplicitMTGuard imt_guard;
-
-    TDirectory *meta_dir = output_file.GetDirectory("meta");
-    if (!meta_dir) meta_dir = output_file.mkdir("meta");
-    if (!meta_dir) {
-        log::fatal("SnapshotPipelineBuilder::writeSnapshotMetadata", "Could not create meta directory in",
-                   output_file.GetName());
-    }
-    meta_dir->cd();
-
-    // Schema tag
-    {
-        TTree v("schema", "schema");
-        int version = 1;
-        v.Branch("version", &version);
-        v.Fill();
-        v.Write("", TObject::kOverwrite);
-    }
-
-    // Totals
-    {
-        TTree totals_tree("totals", "Exposure totals");
-        double total_pot = total_pot_;
-        long total_triggers = total_triggers_;
-        totals_tree.Branch("total_pot", &total_pot);
-        totals_tree.Branch("total_triggers", &total_triggers);
-        totals_tree.Fill();
-        totals_tree.Write("", TObject::kOverwrite);
-    }
-
-    // Dictionaries (beams/periods/stages/variations)
-    auto write_string_dict = [&](const char *name, const auto &map_in) {
-        std::vector<std::pair<uint32_t,std::string>> rows;
-        rows.reserve(map_in.size());
-        for (const auto &kv : map_in) rows.emplace_back(kv.second, kv.first);
-        std::sort(rows.begin(), rows.end(), [](auto &a, auto &b){ return a.first < b.first; });
-
-        TTree t(name, name);
-        uint32_t id; std::string name_s;
-        t.Branch("id",   &id);
-        t.Branch("name", &name_s);
-        for (auto &r : rows) { id = r.first; name_s = r.second; t.Fill(); }
-        t.Write("", TObject::kOverwrite);
-    };
-    write_string_dict("beams",      dicts.beam2id);
-    write_string_dict("periods",    dicts.period2id);
-    write_string_dict("stages",     dicts.stage2id);
-    write_string_dict("variations", dicts.var2id);
-
-    // Samples dict (id <-> key)
-    {
-        std::vector<std::pair<uint32_t,std::string>> rows;
-        rows.reserve(dicts.sample2id.size());
-        for (const auto &kv : dicts.sample2id) rows.emplace_back(kv.second, kv.first);
-        std::sort(rows.begin(), rows.end(), [](auto &a, auto &b){ return a.first < b.first; });
-
-        TTree t("samples_dict", "samples_dict");
-        uint32_t id; std::string key;
-        t.Branch("id",  &id);
-        t.Branch("key", &key);
-        for (auto &r : rows) { id = r.first; key = r.second; t.Fill(); }
-        t.Write("", TObject::kOverwrite);
-    }
-
-    // Origins dict
-    {
-        TTree t("origins", "origins");
-        uint8_t id; std::string name_s;
-        t.Branch("id",   &id);
-        t.Branch("name", &name_s);
-        auto write_one = [&](SampleOrigin o, const char *nm) {
-            auto it = dicts.origin2id.find(o);
-            if (it == dicts.origin2id.end()) return;
-            id = it->second; name_s = nm; t.Fill();
-        };
-        write_one(SampleOrigin::kData,      "data");
-        write_one(SampleOrigin::kMonteCarlo,"mc");
-        write_one(SampleOrigin::kDirt,      "dirt");
-        write_one(SampleOrigin::kExternal,  "external");
-        t.Write("", TObject::kOverwrite);
-    }
-
-    // Per-sample exposure summary (augmented with IDs)
-    {
-        TTree samples_tree("samples", "Per-sample exposure summary");
-        std::string tree_path, sample_key_value, beam, run_period, relative_path, variation_label, stage_name, origin_label;
-        double sample_pot; long sample_triggers;
-        uint32_t sample_id; uint16_t beam_id, period_id, stage_id, variation_id; uint8_t origin_id;
-
-        samples_tree.Branch("tree_path", &tree_path);
-        samples_tree.Branch("sample_key", &sample_key_value);
-        samples_tree.Branch("beam", &beam);
-        samples_tree.Branch("run_period", &run_period);
-        samples_tree.Branch("relative_path", &relative_path);
-        samples_tree.Branch("variation", &variation_label);
-        samples_tree.Branch("stage_name", &stage_name);
-        samples_tree.Branch("origin", &origin_label);
-        samples_tree.Branch("sample_pot", &sample_pot);
-        samples_tree.Branch("sample_triggers", &sample_triggers);
-        samples_tree.Branch("sample_id", &sample_id);
-        samples_tree.Branch("beam_id", &beam_id);
-        samples_tree.Branch("period_id", &period_id);
-        samples_tree.Branch("stage_id", &stage_id);
-        samples_tree.Branch("variation_id", &variation_id);
-        samples_tree.Branch("origin_id", &origin_id);
-
-        for (auto const &[key, sample] : frames_) {
-            const auto *rc = this->getRunConfigForSample(key);
-            const std::string sample_beam   = rc ? rc->beamMode()  : std::string{};
-            const std::string sample_period = rc ? rc->runPeriod() : std::string{};
-            const std::string &sample_stage = sample.stageName();
-
-            beam = sample_beam; run_period = sample_period; stage_name = sample_stage;
-            tree_path = nominalTreePath(key, sample_beam, sample_period, sample.sampleOrigin(), sample_stage);
-            sample_key_value = key.str();
-            relative_path = sample.relativePath();
-            variation_label = "nominal";
-            origin_label = originToString(sample.sampleOrigin());
-            sample_pot = sample.pot(); sample_triggers = sample.triggers();
-
-            sample_id  = dicts.sample2id.at(sample_key_value);
-            beam_id    = dicts.beam2id.at(beam);
-            period_id  = dicts.period2id.at(run_period);
-            stage_id   = dicts.stage2id.at(stage_name);
-            variation_id = dicts.var2id.at(variation_label);
-            origin_id  = dicts.origin2id.at(sample.sampleOrigin());
-            samples_tree.Fill();
-
-            for (const auto &vd : sample.variationDescriptors()) {
-                const auto *vrc = this->getRunConfigForSample(vd.sample_key);
-                const std::string vbeam   = vrc ? vrc->beamMode()  : sample_beam;
-                const std::string vperiod = vrc ? vrc->runPeriod() : sample_period;
-                const std::string &vstage = vd.stage_name.empty() ? sample_stage : vd.stage_name;
-
-                beam = vbeam; run_period = vperiod; stage_name = vstage;
-                variation_label = variationLabelOrKey(vd);
-                tree_path = variationTreePath(key, vd, vbeam, vperiod, sample.sampleOrigin(), vstage);
-                sample_key_value = vd.sample_key.str();
-                relative_path = vd.relative_path;
-                origin_label = originToString(sample.sampleOrigin());
-                sample_pot = vd.pot; sample_triggers = vd.triggers;
-
-                sample_id  = dicts.sample2id.at(key.str()); // same base sample id
-                beam_id    = dicts.beam2id.at(beam);
-                period_id  = dicts.period2id.at(run_period);
-                stage_id   = dicts.stage2id.at(stage_name);
-                variation_id = dicts.var2id.at(variation_label);
-                origin_id  = dicts.origin2id.at(sample.sampleOrigin());
-                samples_tree.Fill();
-            }
-        }
-        samples_tree.Write("", TObject::kOverwrite);
-    }
-
-    // Cutflow
-    {
-        TTree t("cutflow", "Cutflow per sample/variation");
-        uint32_t sample_id;  uint16_t variation_id, beam_id, period_id, stage_id;  uint8_t origin_id;
-        unsigned long long n_total, n_base;
-        std::string sample_key, variation, beam, period, stage, origin;
-
-        t.Branch("sample_id",   &sample_id);
-        t.Branch("variation_id",&variation_id);
-        t.Branch("beam_id",     &beam_id);
-        t.Branch("period_id",   &period_id);
-        t.Branch("stage_id",    &stage_id);
-        t.Branch("origin_id",   &origin_id);
-        t.Branch("n_total",     &n_total);
-        t.Branch("n_base",      &n_base);
-        t.Branch("sample_key",  &sample_key);
-        t.Branch("variation",   &variation);
-        t.Branch("beam",        &beam);
-        t.Branch("period",      &period);
-        t.Branch("stage",       &stage);
-        t.Branch("origin",      &origin);
-
-        for (const auto &r : cutflow) {
-            sample_id   = r.sample_id;
-            variation_id= r.variation_id;
-            beam_id     = r.beam_id;
-            period_id   = r.period_id;
-            stage_id    = r.stage_id;
-            origin_id   = r.origin_id;
-            n_total     = r.n_total;
-            n_base      = r.n_base;
-            sample_key  = r.sample_key;
-            variation   = r.variation;
-            beam        = r.beam;
-            period      = r.period;
-            stage       = r.stage;
-            origin      = r.origin;
-            t.Fill();
-        }
-        t.Write("", TObject::kOverwrite);
-    }
-
-    output_file.cd();
-}
 
 } // namespace proc

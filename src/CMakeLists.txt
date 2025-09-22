@@ -1,5 +1,7 @@
 set(rarexsec_processing_sources
     SnapshotPipelineBuilder.cpp
+    HubCatalog.cpp
+    HubDataFrame.cpp
     RunConfig.cpp
     RunConfigLoader.cpp
     RunConfigRegistry.cpp
@@ -11,6 +13,7 @@ set(rarexsec_processing_sources
     ReconstructionProcessor.cpp
     TruthChannelProcessor.cpp
     WeightProcessor.cpp
+    ShardWriter.cpp
 )
 
 set(rarexsec_processing_dictionary_headers

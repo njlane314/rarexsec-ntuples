@@ -155,9 +155,16 @@ int main(int argc, char **argv) {
                 return 1;
             }
 
+            const std::string hub_suffix = ".hub.root";
+            if (output_file.size() < hub_suffix.size() ||
+                output_file.compare(output_file.size() - hub_suffix.size(), hub_suffix.size(), hub_suffix) != 0) {
+                proc::log::info("snapshot-analysis", "[warning]",
+                                "Hub outputs conventionally use the .hub.root suffix:", output_file);
+            }
+
             builder.snapshot(options.selection.value_or(""), output_file, columns);
-            proc::log::info("snapshot-analysis", "Snapshot written to", output_file);
-            std::cout << "ROOT snapshot saved to: " << output_file << std::endl;
+            proc::log::info("snapshot-analysis", "Hub snapshot written to", output_file);
+            std::cout << "Hub snapshot saved to: " << output_file << std::endl;
         } else {
             builder.printAllBranches();
         }

@@ -12,9 +12,14 @@
 #include <rarexsec/EventProcessorStage.h>
 #include <rarexsec/FilterExpression.h>
 #include <rarexsec/SamplePipeline.h>
+#include <rarexsec/SampleTypes.h>
 #include <rarexsec/VariableRegistry.h>
 
-class TFile;
+namespace ROOT {
+namespace RDF {
+class RNode;
+} // namespace RDF
+} // namespace ROOT
 
 namespace proc {
 
@@ -22,21 +27,6 @@ struct ProvenanceDicts {
   std::unordered_map<std::string, uint32_t> sample2id;
   std::unordered_map<std::string, uint16_t> beam2id, period2id, stage2id, var2id;
   std::unordered_map<SampleOrigin, uint8_t> origin2id;
-};
-
-struct CutflowRow {
-  uint32_t sample_id;
-  uint16_t variation_id, beam_id, period_id, stage_id;
-  uint8_t origin_id;
-  unsigned long long n_total = 0ULL;
-  unsigned long long n_base = 0ULL;
-
-  std::string sample_key;
-  std::string variation;
-  std::string beam;
-  std::string period;
-  std::string stage;
-  std::string origin;
 };
 
 class SnapshotPipelineBuilder {
@@ -79,12 +69,31 @@ class SnapshotPipelineBuilder {
     std::vector<std::unique_ptr<EventProcessorStage>> processors_;
     std::unordered_map<SampleKey, const RunConfig *> run_config_cache_;
 
+    struct Combo {
+        uint32_t sid;
+        uint16_t vid;
+        uint16_t bid;
+        uint16_t pid;
+        uint16_t stg;
+        uint8_t oid;
+        SampleOrigin origin_enum;
+        std::string sk;
+        std::string vlab;
+        std::string beam;
+        std::string period;
+        std::string stage;
+        std::string origin_label;
+        double pot;
+        long triggers;
+    };
+
     void loadAll();
     void processRunConfig(const RunConfig &rc);
 
-    void writeSnapshotMetadata(TFile &output_file,
-                               const ProvenanceDicts &dicts,
-                               const std::vector<CutflowRow> &cutflow) const;
+    void snapshotToHub(const std::string &hub_path,
+                       const std::vector<std::string> &final_columns,
+                       std::vector<ROOT::RDF::RNode> &nodes, const std::vector<Combo> &combos,
+                       const ProvenanceDicts &dicts) const;
 };
 
 }
