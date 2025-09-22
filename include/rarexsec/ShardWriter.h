@@ -20,7 +20,7 @@ class ShardWriter {
         int compression_level = 3;
     };
 
-    explicit ShardWriter(const ShardConfig &config = {});
+    explicit ShardWriter(const ShardConfig &config = ShardConfig{});
 
     std::vector<ShardEntry> writeShards(
         ROOT::RDF::RNode &df,

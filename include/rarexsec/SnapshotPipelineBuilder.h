@@ -15,12 +15,6 @@
 #include <rarexsec/SampleTypes.h>
 #include <rarexsec/VariableRegistry.h>
 
-namespace ROOT {
-namespace RDF {
-class RNode;
-} // namespace RDF
-} // namespace ROOT
-
 namespace proc {
 
 struct ProvenanceDicts {
