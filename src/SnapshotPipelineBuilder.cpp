@@ -12,11 +12,13 @@
 #include <cctype>
 #include <memory>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <rarexsec/BlipProcessor.h>
 #include <rarexsec/LoggerUtils.h>
@@ -338,9 +340,13 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     base_opt.fCompressionLevel = 3;
 
     // Per-(sample, variation) results, one dataframe per node
+    using SnapshotResultHandle = decltype(std::declval<ROOT::RDF::RNode>().Snapshot(
+        std::declval<std::string>(), std::declval<std::string>(),
+        std::declval<std::vector<std::string>>(), std::declval<ROOT::RDF::RSnapshotOptions>()));
+
     struct CountHandles {
         CutflowRow row;
-        ROOT::RDF::RResultPtr<ULong64_t> snapshot;
+        SnapshotResultHandle snapshot;
         ROOT::RDF::RResultPtr<ULong64_t> n_total;
         ROOT::RDF::RResultPtr<ULong64_t> n_base;
     };
