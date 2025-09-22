@@ -1,5 +1,6 @@
 #include <rarexsec/TruthChannelProcessor.h>
 #include <rarexsec/SelectionCatalogue.h>
+#include <rarexsec/TruthDerived.h>
 
 #include <cmath>
 
@@ -23,19 +24,6 @@ DataSampleChannelInfo channelInfoForDataSample(SampleOrigin origin) {
         return {99, 99};
     }
 }
-
-struct TruthDerived {
-    bool in_fiducial;
-    int mc_n_strange;
-    int mc_n_pion;
-    int mc_n_proton;
-    int interaction_mode_category;
-    int inclusive_strange_channel_category;
-    int exclusive_strange_channel_category;
-    int channel_definition_category;
-    bool is_truth_signal;
-    bool pure_slice_signal;
-};
 
 inline int to_mode_cat(int mode) {
     switch (mode) {
