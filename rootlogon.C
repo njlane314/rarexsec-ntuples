@@ -24,6 +24,19 @@ std::string determine_base_directory() {
     return dir;
 }
 
+std::string join_paths(const std::string &base, const std::string &relative) {
+    if (base.empty()) {
+        return relative;
+    }
+
+    std::string result = base;
+    if (!result.empty() && result.back() != '/') {
+        result += '/';
+    }
+    result += relative;
+    return result;
+}
+
 void add_relative_library_paths(const std::string &base_dir) {
     if (base_dir.empty()) {
         return;
@@ -33,17 +46,25 @@ void add_relative_library_paths(const std::string &base_dir) {
         ".",
         "build",
         "build/src",
+        "build/lib",
+        "build-apps",
         "build-apps/src",
+        "build-apps/lib",
+        "build-lib",
+        "build-lib/src",
+        "build-lib/lib",
         "install/lib"
     };
 
     for (const auto &dir : relative_dirs) {
-        std::string path = base_dir;
-        if (!path.empty() && path.back() != '/') {
-            path += '/';
+        std::string path = join_paths(base_dir, dir);
+        if (path.empty()) {
+            continue;
         }
-        path += dir;
-        gSystem->AddDynamicPath(path.c_str());
+
+        if (!gSystem->AccessPathName(path.c_str(), kFileExists)) {
+            gSystem->AddDynamicPath(path.c_str());
+        }
     }
 }
 
