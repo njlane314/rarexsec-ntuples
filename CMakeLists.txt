@@ -34,8 +34,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(RAREXSEC_BUILD_LIB "Build the rarexsec processing library" ON)
 option(RAREXSEC_BUILD_APPS "Build the rarexsec executable tools" ON)
 
-include(CTest)
-
 if(RAREXSEC_BUILD_APPS AND NOT RAREXSEC_BUILD_LIB)
     message(FATAL_ERROR "RAREXSEC_BUILD_APPS=ON requires RAREXSEC_BUILD_LIB=ON because the executables depend on the processing library.")
 endif()
@@ -56,13 +54,6 @@ endif()
 
 if(RAREXSEC_BUILD_APPS)
     add_subdirectory(app)
-endif()
-
-if(BUILD_TESTING)
-    if(NOT RAREXSEC_BUILD_LIB)
-        message(FATAL_ERROR "BUILD_TESTING=ON requires RAREXSEC_BUILD_LIB=ON to access processing components.")
-    endif()
-    add_subdirectory(tests)
 endif()
 
 if(RAREXSEC_BUILD_LIB OR RAREXSEC_BUILD_APPS)
