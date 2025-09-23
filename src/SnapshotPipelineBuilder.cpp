@@ -61,10 +61,6 @@ static IdT intern(MapT &m, const KeyT &k) {
     return id;
 }
 
-static std::string variationLabelOrKey(const proc::VariationDescriptor &vd) {
-    return vd.variation_label.empty() ? proc::variationToKey(vd.variation) : vd.variation_label;
-}
-
 constexpr const char *kInputTreeName = "nuselection/EventSelectionFilter";
 
 static ULong64_t buildEventUid(int run, int sub, int evt) {
@@ -253,7 +249,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         for (const auto &[sample_key, sample] : frames_) {
             ++origin_counts[proc::originToString(sample.sampleOrigin())];
 
-            const std::string stage_label = sample.stageName().empty() ? std::string{"<none>"} : sample.stageName();
+            const auto &stage_label = sample.stageName();
             ++stage_counts[stage_label];
 
             std::string run_label{"<unmapped>"};
@@ -317,11 +313,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const std::string period = rc ? rc->runPeriod() : std::string{};
         const std::string &stage = sample.stageName();
         const auto origin = sample.sampleOrigin();
-        const std::string stage_label = stage.empty() ? std::string{"<none>"} : stage;
         const auto variation_nodes = sample.variationNodes().size();
 
         log::info("SnapshotPipelineBuilder::snapshot", "Configuring sample", key.str(), "origin",
-                  originToString(origin), "stage", stage_label, "with", variation_nodes, "variation nodes");
+                  originToString(origin), "stage", stage, "with", variation_nodes, "variation nodes");
 
         const uint32_t sid = intern<decltype(dicts.sample2id), std::string, uint32_t>(dicts.sample2id, key.str());
         const uint16_t bid = intern<decltype(dicts.beam2id), std::string, uint16_t>(dicts.beam2id, beam);
@@ -352,9 +347,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const auto *vrc = this->getRunConfigForSample(vd.sample_key);
             const std::string vbeam = vrc ? vrc->beamMode() : beam;
             const std::string vperiod = vrc ? vrc->runPeriod() : period;
-            const std::string &vstage = vd.stage_name.empty() ? stage : vd.stage_name;
-            const std::string vstage_label = vstage.empty() ? std::string{"<none>"} : vstage;
-            const std::string variation_label = variationLabelOrKey(vd);
+            const std::string &vstage = vd.stage_name;
+            const std::string &variation_label = vd.canonical_label;
 
             const uint16_t vbid = intern<decltype(dicts.beam2id), std::string, uint16_t>(dicts.beam2id, vbeam);
             const uint16_t vpid = intern<decltype(dicts.period2id), std::string, uint16_t>(dicts.period2id, vperiod);
@@ -362,7 +356,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             const uint16_t vvid = intern<decltype(dicts.var2id), std::string, uint16_t>(dicts.var2id, variation_label);
 
             log::info("SnapshotPipelineBuilder::snapshot", "Configuring variation", variation_label, "for sample",
-                      key.str(), "stage", vstage_label);
+                      key.str(), "stage", vstage);
 
             auto vdf = it->second;
             vdf = configureFriendNode(vdf, is_mc, (static_cast<uint64_t>(sid) << 16) | vvid);
