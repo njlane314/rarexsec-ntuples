@@ -1,9 +1,6 @@
 #include <rarexsec/SamplePipeline.h>
 
-#include <algorithm>
-#include <sstream>
-#include <unordered_set>
-
+#include <rarexsec/ColumnValidation.h>
 #include <rarexsec/LoggerUtils.h>
 
 namespace proc {
@@ -14,60 +11,6 @@ ROOT::RDF::RNode buildBaseDataFrame(const std::string &base_dir, const std::stri
     auto path = base_dir + "/" + rel_path;
     ROOT::RDataFrame df("nuselection/EventSelectionFilter", path);
     return processor.process(df, origin);
-}
-
-std::string joinColumnNames(const std::vector<std::string> &columns) {
-    std::ostringstream oss;
-    for (std::size_t i = 0; i < columns.size(); ++i) {
-        if (i != 0) {
-            oss << ", ";
-        }
-        oss << columns[i];
-    }
-    return oss.str();
-}
-
-enum class ColumnRequirement { kRequired, kOptional };
-
-void reportMissingColumns(const SampleKey &sample_key, const std::string &rel_path, SampleOrigin origin,
-                          ColumnRequirement requirement, const std::vector<std::string> &missing_columns) {
-    if (missing_columns.empty()) {
-        return;
-    }
-
-    constexpr bool kReportOptionalMissingColumns = false;
-    if (requirement == ColumnRequirement::kOptional && !kReportOptionalMissingColumns) {
-        return;
-    }
-
-    std::vector<std::string> sorted_missing{missing_columns.begin(), missing_columns.end()};
-    std::sort(sorted_missing.begin(), sorted_missing.end());
-
-    const std::string &sample_name = sample_key.str();
-    const std::string &identifier = sample_name.empty() ? rel_path : sample_name;
-
-    if (requirement == ColumnRequirement::kRequired &&
-        (origin == SampleOrigin::kMonteCarlo || origin == SampleOrigin::kDirt)) {
-        log::fatal("SamplePipeline::makeDataFrame", "Missing required columns for", identifier, "(origin:",
-                  originToString(origin), "):", joinColumnNames(sorted_missing));
-    }
-
-    static std::unordered_set<std::string> reported_signatures;
-    std::ostringstream signature_stream;
-    signature_stream << identifier << '|' << originToString(origin) << '|' <<
-        (requirement == ColumnRequirement::kRequired ? "required" : "optional") << '|' <<
-        joinColumnNames(sorted_missing);
-    const auto signature = signature_stream.str();
-    if (!reported_signatures.insert(signature).second) {
-        return;
-    }
-
-    const char *requirement_description =
-        requirement == ColumnRequirement::kRequired ? "Skipping unavailable required columns for"
-                                                    : "Optional columns not available for";
-
-    log::info("SamplePipeline::makeDataFrame", "[warning]", requirement_description, identifier, "(origin:",
-              originToString(origin), "):", joinColumnNames(sorted_missing));
 }
 
 ROOT::RDF::RNode applyTruthFilters(ROOT::RDF::RNode df, const std::string &truth_filter) {
@@ -156,28 +99,16 @@ ROOT::RDF::RNode SamplePipeline::makeDataFrame(const std::string &base_dir, cons
     df = applyTruthFilters(df, descriptor_.truth_filter);
     df = applyExclusionKeys(df, descriptor_.truth_exclusions, all_samples_json);
     const auto column_plan = var_reg.columnPlanFor(descriptor_.origin);
-    if (!column_plan.required.empty() || !column_plan.optional.empty()) {
-        std::vector<std::string> missing_required;
-        missing_required.reserve(column_plan.required.size());
-        std::vector<std::string> missing_optional;
-        missing_optional.reserve(column_plan.optional.size());
 
-        auto processColumns = [&](const std::vector<std::string> &columns, std::vector<std::string> &missing) {
-            for (const auto &column : columns) {
-                if (!df.HasColumn(column)) {
-                    missing.push_back(column);
-                }
-            }
-        };
+    const auto missing_required = column_validation::missingColumnsForPlan(
+        df, column_plan.required, column_validation::ColumnRequirement::kRequired);
+    const auto missing_optional = column_validation::missingColumnsForPlan(
+        df, column_plan.optional, column_validation::ColumnRequirement::kOptional);
 
-        processColumns(column_plan.required, missing_required);
-        processColumns(column_plan.optional, missing_optional);
-
-        reportMissingColumns(sample_key, rel_path, descriptor_.origin, ColumnRequirement::kRequired,
-                             missing_required);
-        reportMissingColumns(sample_key, rel_path, descriptor_.origin, ColumnRequirement::kOptional,
-                             missing_optional);
-    }
+    column_validation::reportMissingColumns(sample_key, rel_path, descriptor_.origin,
+                                            column_validation::ColumnRequirement::kRequired, missing_required);
+    column_validation::reportMissingColumns(sample_key, rel_path, descriptor_.origin,
+                                            column_validation::ColumnRequirement::kOptional, missing_optional);
     return df;
 }
 
