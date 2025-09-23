@@ -7,7 +7,7 @@ namespace proc {
 
 class MuonSelectionProcessor : public EventProcessorStage {
   public:
-    ROOT::RDF::RNode process(ROOT::RDF::RNode df, SampleOrigin st) const override;
+    ROOT::RDF::RNode process(ROOT::RDF::RNode df, [[maybe_unused]] SampleOrigin st) const override;
 
   private:
     ROOT::RDF::RNode buildMuonMask(ROOT::RDF::RNode df) const;
