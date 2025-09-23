@@ -18,10 +18,7 @@ FriendWriter::FriendWriter(const FriendConfig &config) : config_(config) {
     }
 }
 
-std::filesystem::path FriendWriter::writeFriend(ROOT::RDF::RNode df,
-                                                const std::string &sample_key,
-                                                const std::string &variation,
-                                                const std::vector<std::string> &columns) const {
+ROOT::RDF::RSnapshotOptions FriendWriter::makeSnapshotOptions() const {
     ROOT::RDF::RSnapshotOptions opt;
     opt.fCompressionAlgorithm = config_.compression_algo;
     opt.fCompressionLevel = config_.compression_level;
@@ -29,8 +26,16 @@ std::filesystem::path FriendWriter::writeFriend(ROOT::RDF::RNode df,
     opt.fSplitLevel = 0;
     opt.fOverwriteIfExists = true;
 
+    return opt;
+}
+
+std::filesystem::path FriendWriter::writeFriend(ROOT::RDF::RNode df,
+                                                const std::string &sample_key,
+                                                const std::string &variation,
+                                                const std::vector<std::string> &columns) const {
     auto path = generateFriendPath(sample_key, variation);
-    return writeFriendToPath(df, path, columns);
+    auto options = makeSnapshotOptions();
+    return writeFriendToPath(df, path, columns, options);
 }
 
 std::filesystem::path FriendWriter::generateFriendPath(const std::string &sample_key,
@@ -43,13 +48,14 @@ std::filesystem::path FriendWriter::generateFriendPath(const std::string &sample
 std::filesystem::path FriendWriter::writeFriendToPath(ROOT::RDF::RNode df,
                                                       const std::filesystem::path &path,
                                                       const std::vector<std::string> &columns) const {
-    ROOT::RDF::RSnapshotOptions opt;
-    opt.fCompressionAlgorithm = config_.compression_algo;
-    opt.fCompressionLevel = config_.compression_level;
-    opt.fAutoFlush = -30 * 1024 * 1024;
-    opt.fSplitLevel = 0;
-    opt.fOverwriteIfExists = true;
+    auto options = makeSnapshotOptions();
+    return writeFriendToPath(df, path, columns, options);
+}
 
+std::filesystem::path FriendWriter::writeFriendToPath(ROOT::RDF::RNode df,
+                                                      const std::filesystem::path &path,
+                                                      const std::vector<std::string> &columns,
+                                                      const ROOT::RDF::RSnapshotOptions &options) const {
     std::filesystem::path resolved = path;
     const auto parent = resolved.parent_path();
     if (!parent.empty()) {
@@ -61,7 +67,7 @@ std::filesystem::path FriendWriter::writeFriendToPath(ROOT::RDF::RNode df,
         }
     }
 
-    auto snapshot = df.Snapshot(config_.tree_name, resolved.string(), columns, opt);
+    auto snapshot = df.Snapshot(config_.tree_name, resolved.string(), columns, options);
     snapshot.GetValue();
 
     return resolved;
