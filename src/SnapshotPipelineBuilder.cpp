@@ -112,6 +112,94 @@ static ROOT::RDF::RNode configureFriendNode(ROOT::RDF::RNode df, bool is_mc, uin
     return df;
 }
 
+const std::vector<std::string> &baseFriendColumns() {
+    static const std::vector<std::string> columns = {"event_uid", "w_nom", "base_sel", "is_mc", "sampvar_uid"};
+    return columns;
+}
+
+std::vector<std::string> requestedFriendColumns() {
+    const std::vector<std::string> derived = {
+        "nominal_event_weight",
+        "base_event_weight",
+        "pass_pre",
+        "pass_flash",
+        "pass_fv",
+        "pass_mu",
+        "pass_topo",
+        "pass_final",
+        "quality_event",
+        "in_reco_fiducial",
+        "muon_mask",
+        "muon_trk_score_v",
+        "muon_trk_llr_pid_v",
+        "muon_trk_start_x_v",
+        "muon_trk_start_y_v",
+        "muon_trk_start_z_v",
+        "muon_trk_end_x_v",
+        "muon_trk_end_y_v",
+        "muon_trk_end_z_v",
+        "muon_trk_length_v",
+        "muon_trk_distance_v",
+        "muon_pfp_generation_v",
+        "muon_track_costheta",
+        "n_muons_tot",
+        "has_muon",
+        "blip_process_code",
+        "blip_distance_to_vertex",
+        "in_fiducial",
+        "mc_n_strange",
+        "mc_n_pion",
+        "mc_n_proton",
+        "interaction_mode_category",
+        "inclusive_strange_channel_category",
+        "exclusive_strange_channel_category",
+        "channel_definition_category",
+        "is_truth_signal",
+        "pure_slice_signal"};
+
+    std::vector<std::string> columns = baseFriendColumns();
+    columns.insert(columns.end(), derived.begin(), derived.end());
+
+    std::vector<std::string> unique;
+    unique.reserve(columns.size());
+    std::unordered_set<std::string> seen;
+    for (const auto &column : columns) {
+        if (seen.insert(column).second) {
+            unique.push_back(column);
+        }
+    }
+    return unique;
+}
+
+std::vector<std::string> selectAvailableFriendColumns(const std::vector<ROOT::RDF::RNode> &nodes,
+                                                      const std::vector<std::string> &candidates) {
+    if (nodes.empty()) {
+        return baseFriendColumns();
+    }
+
+    std::vector<std::string> selected;
+    selected.reserve(candidates.size());
+    for (const auto &column : candidates) {
+        const bool available = std::all_of(nodes.begin(), nodes.end(), [&](const ROOT::RDF::RNode &node) {
+            return node.HasColumn(column);
+        });
+        if (available) {
+            selected.push_back(column);
+        } else {
+            proc::log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "Requested friend column", column,
+                            "is not available for all nodes and will be skipped.");
+        }
+    }
+
+    if (selected.empty()) {
+        proc::log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                        "Falling back to minimal friend schema due to missing derived columns.");
+        return baseFriendColumns();
+    }
+
+    return selected;
+}
+
 } // namespace
 
 namespace proc {
@@ -221,7 +309,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     std::vector<Combo> combos;
     combos.reserve(frames_.size() * 4);
 
-    const std::vector<std::string> friend_columns = {"event_uid", "w_nom", "base_sel", "is_mc", "sampvar_uid"};
+    const auto friend_column_candidates = requestedFriendColumns();
 
     for (const auto &[key, sample] : frames_) {
         const auto *rc = this->getRunConfigForSample(key);
@@ -294,6 +382,7 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     log::info("SnapshotPipelineBuilder::snapshot", "Prepared", combos.size(),
               "friend dataframe nodes for snapshot");
 
+    auto friend_columns = selectAvailableFriendColumns(nodes, friend_column_candidates);
     snapshotToHub(output_file, friend_columns, nodes, combos, dicts);
 }
 

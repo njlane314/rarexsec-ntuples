@@ -119,6 +119,8 @@ Hubs (`*.hub.root`) are lightweight catalogues that describe every shard produce
 - `shards` (TTree) – one row per shard with identifier fields (`sample_id`, `beam_id`, `period_id`, `variation_id`, `origin_id`), the relative shard location (`shard_path`), per-shard event counts, weight sums, exposure totals, and human-readable keys.
 - `hub_meta` (TTree) – key/value metadata entries. `provenance_dicts` preserves the dictionaries that map human-readable labels to the integer identifiers written into the shards, while `summary` stores the integrated POT and trigger totals for the complete hub.
 
+Friend trees snapshot the curated analysis variables alongside the bookkeeping columns. Hubs now include event weights (`nominal_event_weight`, `base_event_weight`), selection flags (`pass_pre`, `pass_final`, `quality_event`, `in_reco_fiducial`), muon features (`muon_mask`, `muon_trk_*`, `n_muons_tot`, `has_muon`), blip metadata, and truth-channel summaries (`interaction_mode_category`, `channel_definition_category`, `is_truth_signal`, `pure_slice_signal`) so these processed quantities are immediately available when attaching the hub in ROOT.
+
 On disk the hub catalogue and shards appear as follows:
 
 ```text
@@ -138,7 +140,11 @@ Save the snippet below as `hub_example.C` and execute `root -l hub_example.C` to
 
 void hub_example() {
     proc::HubDataFrame hub{"snapshot_fhc_r1-3_nuepre.hub.root"};
-    auto df = hub.query("numi-fhc", "run1", "nominal", "mc");
+    auto df = hub.select()
+                   .beam("numi-fhc")
+                   .period("run1")
+                   .origin("mc")
+                   .load();
 
     auto hist = df.Filter("base_sel")
                   .Histo1D({"h_vtx_z", "Reconstructed vertex z", 120, 0., 600.},
@@ -147,7 +153,7 @@ void hub_example() {
 }
 ```
 
-The `HubDataFrame` helper resolves the shard catalogue, builds the underlying `TChain`, and hands back an `RNode` that behaves exactly like the dataframe returned by the snapshot pipeline.
+The `HubDataFrame` helper resolves the shard catalogue, builds the underlying `TChain`, and hands back an `RNode` that behaves exactly like the dataframe returned by the snapshot pipeline. Use `hub.beams()`, `hub.periods("numi-fhc")`, `hub.variations(...)`, or `hub.sampleKeys(...)` to discover the available combinations, and inspect `hub.catalog()` for the cached metadata rows. `hub.summary()` exposes the recorded exposure totals together with the original ntuple base directory; call `hub.setBaseDirectoryOverride(<new-base>)` before loading data when the ntuples live in a different location.
 
 ## ROOT macro quickstart
 
