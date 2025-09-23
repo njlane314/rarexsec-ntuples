@@ -41,12 +41,32 @@ inline bool passesDatasetGate(SampleOrigin origin, float pe_beam, float pe_veto,
     return gate_pass;
 }
 
+inline bool passesDatasetGateAndTrigger(SampleOrigin origin, float pe_beam, float pe_veto, bool software_trigger,
+                                        bool only_mc = false) {
+    if (only_mc && origin != SampleOrigin::kMonteCarlo) {
+        return true;
+    }
+    return passesDatasetGate(origin, pe_beam, pe_veto, only_mc) && software_trigger;
+}
+
 inline bool isSingleGoodSlice(int num_slices, float topological_score) {
     return num_slices == 1 && topological_score > 0.06f;
 }
 
 inline bool passesSliceQuality(float contained_fraction, float cluster_fraction) {
     return contained_fraction >= 0.7f && cluster_fraction >= 0.5f;
+}
+
+inline bool passesQualityCuts(bool pass_flash, bool pass_fv, bool pass_topo) {
+    return pass_flash && pass_fv && pass_topo;
+}
+
+inline bool passesQualityCuts(int num_slices, float topological_score, float x, float y, float z,
+                              float contained_fraction, float cluster_fraction) {
+    const bool single_slice = isSingleGoodSlice(num_slices, topological_score);
+    const bool fiducial = isInFiducialVolumeWithGap(x, y, z);
+    const bool slice_quality = passesSliceQuality(contained_fraction, cluster_fraction);
+    return passesQualityCuts(single_slice, fiducial, slice_quality);
 }
 
 template <typename PlaneHitsU, typename PlaneHitsV, typename PlaneHitsY>
