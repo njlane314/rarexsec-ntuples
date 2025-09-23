@@ -17,6 +17,8 @@
 
 namespace proc {
 
+class SnapshotPipelineBuilderTestHelper;
+
 struct ProvenanceDicts {
   std::unordered_map<std::string, uint32_t> sample2id;
   std::unordered_map<std::string, uint16_t> beam2id, period2id, stage2id, var2id;
@@ -48,6 +50,8 @@ class SnapshotPipelineBuilder {
     void printAllBranches() const;
 
   private:
+    friend class SnapshotPipelineBuilderTestHelper;
+
     const RunConfigRegistry &run_registry_;
     VariableRegistry var_registry_;
 
@@ -83,6 +87,12 @@ class SnapshotPipelineBuilder {
         long triggers;
         bool is_nominal;
     };
+
+    void logSampleDistributions() const;
+    ProvenanceDicts buildProvenanceDicts() const;
+    std::pair<std::vector<ROOT::RDF::RNode>, std::vector<Combo>> prepareFriendNodes(ProvenanceDicts &dicts) const;
+    void launchSnapshotJobs(const std::string &output_file, std::vector<ROOT::RDF::RNode> &nodes,
+                            std::vector<Combo> &combos, ProvenanceDicts &dicts) const;
 
     void loadAll();
     void processRunConfig(const RunConfig &rc);

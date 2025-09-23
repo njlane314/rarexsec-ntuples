@@ -228,20 +228,7 @@ const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey 
     return nullptr;
 }
 
-void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
-                                       const std::vector<std::string> &columns) const {
-    if (!filter_expr.empty()) {
-        log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
-                  "Selection filters are ignored when producing friend metadata:", filter_expr);
-    }
-    if (!columns.empty()) {
-        log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
-                  "Requested payload columns are ignored; friend trees use a fixed schema.");
-    }
-
-    log::info("SnapshotPipelineBuilder::snapshot", "Preparing hub snapshot", output_file);
-    log::info("SnapshotPipelineBuilder::snapshot", "Processing", frames_.size(), "samples");
-
+void SnapshotPipelineBuilder::logSampleDistributions() const {
     if (!frames_.empty()) {
         std::unordered_map<std::string, std::size_t> origin_counts;
         std::unordered_map<std::string, std::size_t> stage_counts;
@@ -291,8 +278,9 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     } else {
         log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No samples have been queued for processing.");
     }
+}
 
-    // Build provenance dictionaries
+SnapshotPipelineBuilder::ProvenanceDicts SnapshotPipelineBuilder::buildProvenanceDicts() const {
     ProvenanceDicts dicts;
     dicts.origin2id[SampleOrigin::kData] =
         intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kData);
@@ -302,14 +290,15 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kDirt);
     dicts.origin2id[SampleOrigin::kExternal] =
         intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kExternal);
+    return dicts;
+}
 
-    // Build nodes
+std::pair<std::vector<ROOT::RDF::RNode>, std::vector<SnapshotPipelineBuilder::Combo>>
+SnapshotPipelineBuilder::prepareFriendNodes(ProvenanceDicts &dicts) const {
     std::vector<ROOT::RDF::RNode> nodes;
     nodes.reserve(frames_.size() * 2);
     std::vector<Combo> combos;
     combos.reserve(frames_.size() * 4);
-
-    const auto friend_column_candidates = requestedFriendColumns();
 
     for (const auto &[key, sample] : frames_) {
         const auto *rc = this->getRunConfigForSample(key);
@@ -331,7 +320,6 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const uint8_t oid = dicts.origin2id.at(origin);
         const bool is_mc = (origin == SampleOrigin::kMonteCarlo);
 
-        // nominal
         {
             auto df = sample.nominalNode();
             df = configureFriendNode(df, is_mc, (static_cast<uint64_t>(sid) << 16) | vnom);
@@ -342,7 +330,6 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                                    sample.triggers(), true});
         }
 
-        // variations
         for (const auto &vd : sample.variationDescriptors()) {
             auto it = sample.variationNodes().find(vd.variation);
             if (it == sample.variationNodes().end()) {
@@ -376,14 +363,45 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
 
     if (nodes.empty()) {
         log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "No nodes to process.");
+    } else {
+        log::info("SnapshotPipelineBuilder::snapshot", "Prepared", combos.size(),
+                  "friend dataframe nodes for snapshot");
+    }
+
+    return {std::move(nodes), std::move(combos)};
+}
+
+void SnapshotPipelineBuilder::launchSnapshotJobs(const std::string &output_file,
+                                                 std::vector<ROOT::RDF::RNode> &nodes,
+                                                 std::vector<Combo> &combos, ProvenanceDicts &dicts) const {
+    const auto friend_column_candidates = requestedFriendColumns();
+    auto friend_columns = selectAvailableFriendColumns(nodes, friend_column_candidates);
+    snapshotToHub(output_file, friend_columns, nodes, combos, dicts);
+}
+
+void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
+                                       const std::vector<std::string> &columns) const {
+    if (!filter_expr.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                  "Selection filters are ignored when producing friend metadata:", filter_expr);
+    }
+    if (!columns.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                  "Requested payload columns are ignored; friend trees use a fixed schema.");
+    }
+
+    log::info("SnapshotPipelineBuilder::snapshot", "Preparing hub snapshot", output_file);
+    log::info("SnapshotPipelineBuilder::snapshot", "Processing", frames_.size(), "samples");
+
+    this->logSampleDistributions();
+
+    auto dicts = this->buildProvenanceDicts();
+    auto [nodes, combos] = this->prepareFriendNodes(dicts);
+    if (nodes.empty()) {
         return;
     }
 
-    log::info("SnapshotPipelineBuilder::snapshot", "Prepared", combos.size(),
-              "friend dataframe nodes for snapshot");
-
-    auto friend_columns = selectAvailableFriendColumns(nodes, friend_column_candidates);
-    snapshotToHub(output_file, friend_columns, nodes, combos, dicts);
+    this->launchSnapshotJobs(output_file, nodes, combos, dicts);
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
