@@ -1,6 +1,6 @@
-// Run with: root -l -q 'tools/hub_preview.C'
+// Run with: root -l -q 'hub_preview.C'
 
-#include "../include/rarexsec/HubDataFrame.h"
+#include "include/rarexsec/HubDataFrame.h"
 
 #include "TInterpreter.h"
 #include "TSystem.h"
@@ -93,7 +93,7 @@ bool ensure_processing_library_available() {
     initialised = true;
 
     std::filesystem::path current_file = std::filesystem::absolute(__FILE__);
-    auto repo_root = current_file.parent_path().parent_path();
+    auto repo_root = current_file.parent_path();
 
     const std::vector<std::string> candidates = {"librarexsec_processing",
                                                  "librarexsec_processing.so",
