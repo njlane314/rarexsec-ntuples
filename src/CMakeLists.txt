@@ -1,4 +1,5 @@
 set(rarexsec_processing_sources
+    ColumnValidation.cpp
     SnapshotPipelineBuilder.cpp
     HubCatalog.cpp
     HubDataFrame.cpp
