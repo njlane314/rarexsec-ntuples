@@ -4,13 +4,101 @@
 
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
+#include "TSystem.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
 
+namespace {
+
+bool load_processing_library() {
+    static bool attempted = false;
+    static bool loaded = false;
+    if (attempted) {
+        return loaded;
+    }
+    attempted = true;
+
+    std::vector<std::string> candidates;
+
+    if (const char *override_path = gSystem->Getenv("RAREXSEC_PROCESSING_LIBRARY")) {
+        if (override_path[0] != '\0') {
+            candidates.emplace_back(override_path);
+        }
+    }
+
+    std::filesystem::path script_dir = std::filesystem::absolute(std::filesystem::path(__FILE__)).parent_path();
+    std::filesystem::path repo_root = script_dir.parent_path();
+
+    std::vector<std::filesystem::path> search_dirs = {
+        std::filesystem::current_path(),
+        script_dir,
+        repo_root,
+        repo_root / "build",
+        repo_root / "build" / "src",
+        repo_root / "build-apps",
+        repo_root / "build-apps" / "src",
+        repo_root / "build-lib",
+        repo_root / "build-lib" / "src",
+        repo_root / "install",
+        repo_root / "install" / "lib"
+    };
+
+    const std::vector<std::string> library_filenames = {
+        "librarexsec_processing.so",
+        "librarexsec_processing.dylib",
+        "rarexsec_processing.dll"
+    };
+
+    for (const auto &dir : search_dirs) {
+        if (dir.empty() || !std::filesystem::exists(dir)) {
+            continue;
+        }
+        for (const auto &name : library_filenames) {
+            auto candidate_path = (dir / name).lexically_normal();
+            if (std::filesystem::exists(candidate_path)) {
+                candidates.emplace_back(candidate_path.string());
+            }
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end());
+    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+
+    for (const auto &path : candidates) {
+        if (gSystem->Load(path.c_str()) >= 0) {
+            loaded = true;
+            return true;
+        }
+    }
+
+    const std::vector<const char *> fallback_names = {
+        "librarexsec_processing",
+        "rarexsec_processing"
+    };
+
+    for (const auto *name : fallback_names) {
+        if (gSystem->Load(name) >= 0) {
+            loaded = true;
+            return true;
+        }
+    }
+
+    std::cerr << "[error] Unable to load the rarexsec processing library (librarexsec_processing).\n"
+              << "Build the project (for example with 'make') or set the RAREXSEC_PROCESSING_LIBRARY "
+              << "environment variable to the compiled library path." << std::endl;
+    return false;
+}
+
+} // namespace
+
 void hub_preview() {
+    if (!load_processing_library()) {
+        return;
+    }
     const std::string hub_path = "snapshot_fhc_r1-3_nuepre.hub.root";
     const std::string beam = "numi-fhc";
     const std::string period = "run1";
