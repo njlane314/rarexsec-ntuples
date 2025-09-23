@@ -149,6 +149,27 @@ void hub_example() {
 
 The `HubDataFrame` helper resolves the shard catalogue, builds the underlying `TChain`, and hands back an `RNode` that behaves exactly like the dataframe returned by the snapshot pipeline.
 
+### CNN friend registration
+
+When the CNN inference step writes out ROOT trees with your scores you can register them directly as hub friends without rewriting the shards. The helper below records the friend file locations (and an optional friend tree name) inside the hub catalogue so downstream jobs pick them up automatically:
+
+```bash
+# Single friend file shared by every hub entry
+./build/app/cnn-friend-register/cnn-friend-register \
+    training_pool.hub.root \
+    --single-file cnn_scores.root \
+    --tree cnn_output
+
+# Directory that mirrors the shard filenames, e.g. shards/foo.root -> cnn/foo.root
+./build/app/cnn-friend-register/cnn-friend-register \
+    training_pool.hub.root \
+    --shard-dir cnn_scores \
+    --suffix _cnn \
+    --tree cnn_output
+```
+
+Use `--keep-structure` when the CNN outputs live in a directory hierarchy that matches the shards instead of flat filenames, `--extension` to replace the suffix (for example `.root`), and `--allow-missing` to leave catalogue entries unchanged if a friend file has not been produced yet. Passing `--tree` updates the hub metadata so `HubDataFrame` automatically loads the scores when querying the snapshot.
+
 ## ROOT macro quickstart
 
 ```bash

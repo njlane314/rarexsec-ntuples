@@ -2,6 +2,7 @@ set(rarexsec_processing_sources
     SnapshotPipelineBuilder.cpp
     HubCatalog.cpp
     HubDataFrame.cpp
+    HubFriendLinker.cpp
     RunConfig.cpp
     RunConfigLoader.cpp
     RunConfigRegistry.cpp

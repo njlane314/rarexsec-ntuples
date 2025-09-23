@@ -20,8 +20,18 @@ target_compile_features(snapshot-training PRIVATE cxx_std_17)
 
 set_target_properties(snapshot-training PROPERTIES EXPORT_NAME training_pool)
 
+add_executable(cnn-friend-register)
+
+target_sources(cnn-friend-register PRIVATE cnn_friend_register.cpp)
+
+target_link_libraries(cnn-friend-register PRIVATE rarexsec::processing)
+
+target_compile_features(cnn-friend-register PRIVATE cxx_std_17)
+
+set_target_properties(cnn-friend-register PROPERTIES EXPORT_NAME cnn_friend_register)
+
 install(
-    TARGETS snapshot-analysis snapshot-training
+    TARGETS snapshot-analysis snapshot-training cnn-friend-register
     EXPORT ${RAREXSEC_EXPORT_SET}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

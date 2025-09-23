@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <filesystem>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include <ROOT/RDataFrame.hxx>
@@ -20,7 +23,7 @@ constexpr const char *kMetaTreeName = "hub_meta";
 namespace proc {
 
 HubDataFrame::HubDataFrame(const std::string &hub_path)
-    : hub_path_(hub_path), friend_tree_name_("meta") {
+    : hub_path_(hub_path), friend_tree_name_("meta"), entries_loaded_(false) {
     try {
         ROOT::RDataFrame meta_df(kMetaTreeName, hub_path_);
         auto keys_result = meta_df.Take<std::string>("key");
@@ -46,6 +49,70 @@ HubDataFrame::HubDataFrame(const std::string &hub_path)
     } catch (const std::exception &ex) {
         log::info("HubDataFrame", "[warning]", "Unable to load hub metadata:", ex.what());
     }
+}
+
+const std::vector<HubDataFrame::EntryInfo> &HubDataFrame::entries() {
+    if (entries_loaded_) {
+        return cached_entries_;
+    }
+
+    try {
+        ROOT::RDataFrame catalog_df(kCatalogTreeName, hub_path_);
+        auto entry_ids = catalog_df.Take<UInt_t>("entry_id");
+        auto sample_keys = catalog_df.Take<std::string>("sample_key");
+        auto beams = catalog_df.Take<std::string>("beam");
+        auto periods = catalog_df.Take<std::string>("period");
+        auto variations = catalog_df.Take<std::string>("variation");
+        auto origins = catalog_df.Take<std::string>("origin");
+        auto stages = catalog_df.Take<std::string>("stage");
+        auto dataset_paths = catalog_df.Take<std::string>("dataset_path");
+        auto dataset_trees = catalog_df.Take<std::string>("dataset_tree");
+        auto friend_paths = catalog_df.Take<std::string>("friend_path");
+        auto friend_trees = catalog_df.Take<std::string>("friend_tree");
+
+        const auto entries_count = entry_ids->size();
+        cached_entries_.resize(entries_count);
+
+        for (std::size_t i = 0; i < entries_count; ++i) {
+            EntryInfo info;
+            info.entry_id = entry_ids->at(i);
+            info.sample_key = sample_keys->at(i);
+            info.beam = beams->at(i);
+            info.period = periods->at(i);
+            info.variation = variations->at(i);
+            info.origin = origins->at(i);
+            info.stage = stages->at(i);
+            info.dataset_path = dataset_paths->at(i);
+            info.dataset_tree = dataset_trees->at(i);
+            info.friend_path = friend_paths->at(i);
+            info.friend_tree = friend_trees->at(i);
+            cached_entries_[i] = std::move(info);
+        }
+
+        entries_loaded_ = true;
+    } catch (const std::exception &ex) {
+        log::info("HubDataFrame", "[warning]", "Failed to load hub entries:", ex.what());
+    }
+
+    return cached_entries_;
+}
+
+std::vector<HubDataFrame::Combination> HubDataFrame::getAllCombinations() {
+    const auto &all_entries = entries();
+    std::vector<Combination> combos;
+    combos.reserve(all_entries.size());
+
+    std::set<std::tuple<std::string, std::string, std::string, std::string, std::string, std::string>> seen;
+
+    for (const auto &entry : all_entries) {
+        auto key = std::make_tuple(entry.sample_key, entry.beam, entry.period, entry.variation, entry.origin, entry.stage);
+        if (seen.insert(key).second) {
+            combos.push_back(Combination{entry.sample_key, entry.beam, entry.period, entry.variation, entry.origin,
+                                         entry.stage});
+        }
+    }
+
+    return combos;
 }
 
 ROOT::RDF::RNode HubDataFrame::query(const std::string &beam,
