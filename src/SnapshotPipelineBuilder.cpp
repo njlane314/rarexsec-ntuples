@@ -193,13 +193,30 @@ std::vector<std::string> selectAvailableFriendColumns(std::vector<ROOT::RDF::RNo
         return baseFriendColumns();
     }
 
+    auto first_columns = nodes.front().GetColumnNames();
+    std::unordered_set<std::string> common_columns;
+    common_columns.reserve(first_columns.size());
+    common_columns.insert(first_columns.begin(), first_columns.end());
+
+    for (std::size_t idx = 1; idx < nodes.size() && !common_columns.empty(); ++idx) {
+        const auto node_column_names = nodes[idx].GetColumnNames();
+        std::unordered_set<std::string> node_columns;
+        node_columns.reserve(node_column_names.size());
+        node_columns.insert(node_column_names.begin(), node_column_names.end());
+
+        for (auto it = common_columns.begin(); it != common_columns.end();) {
+            if (node_columns.find(*it) == node_columns.end()) {
+                it = common_columns.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     std::vector<std::string> selected;
     selected.reserve(candidates.size());
     for (const auto &column : candidates) {
-        const bool available = std::all_of(nodes.begin(), nodes.end(), [&](ROOT::RDF::RNode &node) {
-            return node.HasColumn(column);
-        });
-        if (available) {
+        if (common_columns.find(column) != common_columns.end()) {
             selected.push_back(column);
         } else {
             proc::log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "Requested friend column", column,
