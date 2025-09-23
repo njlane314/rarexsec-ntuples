@@ -20,8 +20,16 @@ target_compile_features(snapshot-training PRIVATE cxx_std_17)
 
 set_target_properties(snapshot-training PROPERTIES EXPORT_NAME training_pool)
 
+add_executable(hub-attach-friends)
+
+target_sources(hub-attach-friends PRIVATE hub_attach_friends.cpp)
+
+target_link_libraries(hub-attach-friends PRIVATE rarexsec::processing)
+
+target_compile_features(hub-attach-friends PRIVATE cxx_std_17)
+
 install(
-    TARGETS snapshot-analysis snapshot-training
+    TARGETS snapshot-analysis snapshot-training hub-attach-friends
     EXPORT ${RAREXSEC_EXPORT_SET}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

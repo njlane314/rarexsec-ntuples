@@ -17,11 +17,13 @@ class FriendWriter {
         FriendConfig()
             : output_dir(std::filesystem::path{"friends"}),
               compression_algo(ROOT::kZSTD),
-              compression_level(4) {}
+              compression_level(4),
+              tree_name("meta") {}
 
         std::filesystem::path output_dir;
         ROOT::ECompressionAlgorithm compression_algo;
         int compression_level;
+        std::string tree_name;
     };
 
     explicit FriendWriter(const FriendConfig &config = FriendConfig{});
@@ -30,6 +32,10 @@ class FriendWriter {
                                       const std::string &sample_key,
                                       const std::string &variation,
                                       const std::vector<std::string> &columns) const;
+
+    std::filesystem::path writeFriendToPath(ROOT::RDF::RNode df,
+                                            const std::filesystem::path &path,
+                                            const std::vector<std::string> &columns) const;
 
   private:
     FriendConfig config_;

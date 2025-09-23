@@ -398,7 +398,7 @@ void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
                                             const ProvenanceDicts &dicts) const {
     log::info("SnapshotPipelineBuilder", "Creating hub snapshot:", hub_path);
 
-    HubCatalog hub(hub_path, true);
+    HubCatalog hub(hub_path, HubCatalog::OpenMode::Recreate);
     hub.writeDictionaries(dicts);
     const std::string friend_tree_name = "meta";
     hub.writeSummary(total_pot_, total_triggers_, ntuple_base_directory_, friend_tree_name);

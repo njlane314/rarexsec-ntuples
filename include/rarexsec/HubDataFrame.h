@@ -25,6 +25,12 @@ class HubDataFrame {
     };
 
     struct CatalogEntry {
+        struct FriendInfo {
+            std::string label;
+            std::string tree;
+            std::string path;
+        };
+
         std::uint32_t entry_id = 0U;
         std::uint32_t sample_id = 0U;
         std::uint16_t beam_id = 0U;
@@ -41,6 +47,16 @@ class HubDataFrame {
         double sum_weights = 0.0;
         double pot = 0.0;
         long triggers = 0;
+        std::string sample_key;
+        std::string beam;
+        std::string period;
+        std::string variation;
+        std::string origin;
+        std::string stage;
+        std::vector<FriendInfo> friends;
+    };
+
+    struct Combination {
         std::string sample_key;
         std::string beam;
         std::string period;
@@ -113,6 +129,8 @@ class HubDataFrame {
     const std::vector<CatalogEntry> &catalog() const noexcept { return entries_; }
     const ProvenanceDictionaries &provenance() const noexcept { return provenance_dicts_; }
 
+    std::vector<Combination> getAllCombinations() const;
+
     std::vector<std::string> beams() const;
     std::vector<std::string> periods(const std::optional<std::string> &beam = std::nullopt) const;
     std::vector<std::string> origins(const std::optional<std::string> &beam = std::nullopt,
@@ -147,14 +165,21 @@ class HubDataFrame {
 
     std::filesystem::path resolveDatasetPath(const CatalogEntry &entry) const;
     std::filesystem::path resolveFriendPath(const CatalogEntry &entry) const;
+    std::filesystem::path resolveFriendPath(const std::string &friend_path) const;
 
     void loadMetadata();
     void loadCatalog();
+    void loadFriendMetadata();
 
     std::string hub_path_;
     std::string hub_directory_;
     std::unique_ptr<TChain> current_chain_;
-    std::unique_ptr<TChain> friend_chain_;
+    struct FriendChain {
+        std::unique_ptr<TChain> chain;
+        std::string alias;
+        std::string key;
+    };
+    std::vector<FriendChain> friend_chains_;
     Summary summary_;
     std::vector<CatalogEntry> entries_;
     ProvenanceDictionaries provenance_dicts_;
