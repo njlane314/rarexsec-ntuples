@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -49,12 +50,14 @@ class SamplePipeline {
   private:
     SampleDescriptor descriptor_;
 
+    std::unordered_map<SampleKey, std::string> truth_filter_index_;
+
     ROOT::RDF::RNode nominal_node_;
     std::map<SampleVariation, ROOT::RDF::RNode> variation_nodes_;
 
     ROOT::RDF::RNode makeDataFrame(const std::string &base_dir, const VariableRegistry &var_reg,
                                    EventProcessorStage &processor, const std::string &rel_path,
-                                   const SampleKey &sample_key, const nlohmann::json &all_samples_json);
+                                   const SampleKey &sample_key);
 };
 
 }
