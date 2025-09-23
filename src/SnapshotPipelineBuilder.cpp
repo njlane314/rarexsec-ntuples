@@ -30,6 +30,21 @@
 #include <rarexsec/WeightProcessor.h>
 
 namespace {
+using SnapshotProcessorPipeline =
+    proc::ProcessorPipeline<proc::WeightProcessor, proc::TruthChannelProcessor, proc::BlipProcessor,
+                            proc::MuonSelectionProcessor, proc::ReconstructionProcessor,
+                            proc::PreselectionProcessor>;
+
+std::unique_ptr<SnapshotProcessorPipeline> makeSnapshotProcessorPipeline(const nlohmann::json &sample_json,
+                                                                         double total_run_pot,
+                                                                         long total_run_triggers) {
+    return std::make_unique<SnapshotProcessorPipeline>(
+        std::make_unique<proc::WeightProcessor>(sample_json, total_run_pot, total_run_triggers),
+        std::make_unique<proc::TruthChannelProcessor>(), std::make_unique<proc::BlipProcessor>(),
+        std::make_unique<proc::MuonSelectionProcessor>(), std::make_unique<proc::ReconstructionProcessor>(),
+        std::make_unique<proc::PreselectionProcessor>());
+}
+
 std::string canonicaliseBeamName(const std::string &beam) {
     std::string trimmed = beam;
     const auto begin = trimmed.find_first_not_of(" \t\n\r");
@@ -542,13 +557,7 @@ void SnapshotPipelineBuilder::processRunConfig(const RunConfig &rc) {
             continue;
         }
 
-        auto pipeline = std::make_unique<ProcessorPipeline<WeightProcessor, TruthChannelProcessor, BlipProcessor,
-                                                            MuonSelectionProcessor, ReconstructionProcessor,
-                                                            PreselectionProcessor>>(
-            std::make_unique<WeightProcessor>(sample_json, total_pot_, total_triggers_),
-            std::make_unique<TruthChannelProcessor>(), std::make_unique<BlipProcessor>(),
-            std::make_unique<MuonSelectionProcessor>(), std::make_unique<ReconstructionProcessor>(),
-            std::make_unique<PreselectionProcessor>());
+        auto pipeline = makeSnapshotProcessorPipeline(sample_json, total_pot_, total_triggers_);
         processors_.push_back(std::move(pipeline));
 
         auto &processor = *processors_.back();
