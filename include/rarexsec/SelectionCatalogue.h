@@ -49,6 +49,25 @@ inline bool passesSliceQuality(float contained_fraction, float cluster_fraction)
     return contained_fraction >= 0.7f && cluster_fraction >= 0.5f;
 }
 
+inline bool passesDatasetGateAndTrigger(SampleOrigin origin, float pe_beam, float pe_veto, bool software_trigger,
+                                        bool only_mc = false) {
+    return software_trigger && passesDatasetGate(origin, pe_beam, pe_veto, only_mc);
+}
+
+inline bool passesQualityCuts(bool dataset_gate_and_trigger, int num_slices, float topological_score, float x,
+                              float y, float z, float contained_fraction, float cluster_fraction) {
+    return dataset_gate_and_trigger && isSingleGoodSlice(num_slices, topological_score) &&
+           isInFiducialVolumeWithGap(x, y, z) && passesSliceQuality(contained_fraction, cluster_fraction);
+}
+
+inline bool passesQualityCuts(SampleOrigin origin, float pe_beam, float pe_veto, bool software_trigger,
+                              int num_slices, float topological_score, float x, float y, float z,
+                              float contained_fraction, float cluster_fraction, bool only_mc_dataset_gate = false) {
+    return passesQualityCuts(passesDatasetGateAndTrigger(origin, pe_beam, pe_veto, software_trigger,
+                                                         only_mc_dataset_gate),
+                             num_slices, topological_score, x, y, z, contained_fraction, cluster_fraction);
+}
+
 template <typename PlaneHitsU, typename PlaneHitsV, typename PlaneHitsY>
 inline bool passesMuonId(float score, float llr, float length, float distance_to_vertex, unsigned generation,
                          PlaneHitsU hits_u, PlaneHitsV hits_v, PlaneHitsY hits_y) {

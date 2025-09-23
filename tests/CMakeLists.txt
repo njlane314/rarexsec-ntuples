@@ -23,3 +23,15 @@ target_link_libraries(WeightProcessorTests
 
 include(GoogleTest)
 gtest_discover_tests(WeightProcessorTests)
+
+add_executable(SelectionProcessorTests
+    SelectionProcessor.test.cpp
+)
+
+target_link_libraries(SelectionProcessorTests
+    PRIVATE
+        GTest::gtest_main
+        rarexsec::processing
+)
+
+gtest_discover_tests(SelectionProcessorTests)
