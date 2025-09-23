@@ -1,6 +1,7 @@
 #ifndef SNAPSHOT_PIPELINE_BUILDER_H
 #define SNAPSHOT_PIPELINE_BUILDER_H
 
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
@@ -8,6 +9,7 @@
 #include <vector>
 
 #include <rarexsec/AnalysisKey.h>
+#include <rarexsec/HubCatalog.h>
 #include <rarexsec/RunConfigRegistry.h>
 #include <rarexsec/EventProcessorStage.h>
 #include <rarexsec/FilterExpression.h>
@@ -16,6 +18,8 @@
 #include <rarexsec/VariableRegistry.h>
 
 namespace proc {
+
+class FriendWriter;
 
 struct ProvenanceDicts {
   std::unordered_map<std::string, uint32_t> sample2id;
@@ -91,6 +95,21 @@ class SnapshotPipelineBuilder {
                        const std::vector<std::string> &friend_columns,
                        std::vector<ROOT::RDF::RNode> &nodes, const std::vector<Combo> &combos,
                        const ProvenanceDicts &dicts) const;
+
+    /**
+     * Collect metadata entries for a single dataframe node and write its friend tree.
+     *
+     * Thread-safety: The caller must ensure that the provided FriendWriter supports
+     * concurrent invocations of writeFriend. The hub directory, friend column list
+     * and friend tree name must outlive the asynchronous task that executes this
+     * helper.
+     */
+    std::vector<HubEntry> collectHubEntriesForNode(ROOT::RDF::RNode node,
+                                                   const Combo &combo,
+                                                   FriendWriter &writer,
+                                                   const std::filesystem::path &hub_dir,
+                                                   const std::vector<std::string> &friend_columns,
+                                                   const std::string &friend_tree_name) const;
 };
 
 }

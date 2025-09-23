@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <functional>
 #include <future>
 #include <iterator>
 #include <memory>
@@ -391,6 +392,65 @@ void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std:
     this->snapshot(query.str(), output_file, columns);
 }
 
+std::vector<HubEntry> SnapshotPipelineBuilder::collectHubEntriesForNode(
+    ROOT::RDF::RNode node,
+    const Combo &combo,
+    FriendWriter &writer,
+    const std::filesystem::path &hub_dir,
+    const std::vector<std::string> &friend_columns,
+    const std::string &friend_tree_name) const {
+    ROOT::EnableImplicitMT(1);
+
+    log::info("SnapshotPipelineBuilder", "Materialising friend metadata for", combo.sk, combo.vlab);
+
+    auto count = node.Count();
+    auto min_uid = node.Min<ULong64_t>("event_uid");
+    auto max_uid = node.Max<ULong64_t>("event_uid");
+    auto sum_weights = node.Sum<double>("w_nom");
+
+    auto path = writer.writeFriend(node, combo.sk, combo.vlab, friend_columns);
+
+    const auto n_events = count.GetValue();
+    if (n_events == 0ULL) {
+        std::error_code remove_ec;
+        std::filesystem::remove(path, remove_ec);
+        if (remove_ec) {
+            log::info("SnapshotPipelineBuilder", "[warning]", "Failed to remove empty friend tree", path.string(),
+                      remove_ec.message());
+        }
+        return {};
+    }
+
+    HubEntry entry;
+    entry.sample_id = combo.sid;
+    entry.beam_id = combo.bid;
+    entry.period_id = combo.pid;
+    entry.variation_id = combo.vid;
+    entry.origin_id = combo.oid;
+    entry.dataset_path = combo.dataset_path;
+    entry.dataset_tree = combo.dataset_tree;
+
+    std::error_code rel_ec;
+    const auto relative_friend = std::filesystem::relative(path, hub_dir, rel_ec);
+    entry.friend_path = (rel_ec ? path : relative_friend).generic_string();
+    entry.friend_tree = friend_tree_name;
+
+    entry.n_events = n_events;
+    entry.first_event_uid = min_uid.GetValue();
+    entry.last_event_uid = max_uid.GetValue();
+    entry.sum_weights = sum_weights.GetValue();
+    entry.pot = combo.pot;
+    entry.triggers = combo.triggers;
+    entry.sample_key = combo.sk;
+    entry.beam = combo.beam;
+    entry.period = combo.period;
+    entry.variation = combo.vlab;
+    entry.origin = combo.origin_label;
+    entry.stage = combo.stage;
+
+    return std::vector<HubEntry>{std::move(entry)};
+}
+
 void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
                                             const std::vector<std::string> &friend_columns,
                                             std::vector<ROOT::RDF::RNode> &nodes,
@@ -413,60 +473,15 @@ void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
     futures.reserve(nodes.size());
 
     for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
-        futures.push_back(std::async(std::launch::async, [&, idx]() {
-            ROOT::EnableImplicitMT(1);
-            auto node = nodes[idx];
-            const auto &combo = combos[idx];
-
-            log::info("SnapshotPipelineBuilder", "Materialising friend metadata for", combo.sk, combo.vlab);
-
-            auto count = node.Count();
-            auto min_uid = node.Min<ULong64_t>("event_uid");
-            auto max_uid = node.Max<ULong64_t>("event_uid");
-            auto sum_weights = node.Sum<double>("w_nom");
-
-            auto path = writer.writeFriend(node, combo.sk, combo.vlab, friend_columns);
-
-            const auto n_events = count.GetValue();
-            if (n_events == 0ULL) {
-                std::error_code remove_ec;
-                std::filesystem::remove(path, remove_ec);
-                if (remove_ec) {
-                    log::info("SnapshotPipelineBuilder", "[warning]", "Failed to remove empty friend tree",
-                              path.string(), remove_ec.message());
-                }
-                return std::vector<HubEntry>{};
-            }
-
-            HubEntry entry;
-            entry.sample_id = combo.sid;
-            entry.beam_id = combo.bid;
-            entry.period_id = combo.pid;
-            entry.variation_id = combo.vid;
-            entry.origin_id = combo.oid;
-            entry.dataset_path = combo.dataset_path;
-            entry.dataset_tree = combo.dataset_tree;
-
-            std::error_code rel_ec;
-            const auto relative_friend = std::filesystem::relative(path, hub_dir, rel_ec);
-            entry.friend_path = (rel_ec ? path : relative_friend).generic_string();
-            entry.friend_tree = friend_tree_name;
-
-            entry.n_events = n_events;
-            entry.first_event_uid = min_uid.GetValue();
-            entry.last_event_uid = max_uid.GetValue();
-            entry.sum_weights = sum_weights.GetValue();
-            entry.pot = combo.pot;
-            entry.triggers = combo.triggers;
-            entry.sample_key = combo.sk;
-            entry.beam = combo.beam;
-            entry.period = combo.period;
-            entry.variation = combo.vlab;
-            entry.origin = combo.origin_label;
-            entry.stage = combo.stage;
-
-            return std::vector<HubEntry>{std::move(entry)};
-        }));
+        futures.push_back(std::async(std::launch::async,
+                                     &SnapshotPipelineBuilder::collectHubEntriesForNode,
+                                     this,
+                                     nodes[idx],
+                                     std::cref(combos[idx]),
+                                     std::ref(writer),
+                                     hub_dir,
+                                     std::cref(friend_columns),
+                                     std::cref(friend_tree_name)));
     }
 
     std::vector<HubEntry> all_entries;
