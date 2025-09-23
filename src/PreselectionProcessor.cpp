@@ -29,10 +29,14 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
                                  {"contained_fraction",
                                   "slice_cluster_fraction"});
 
-    auto quality_df = topo_df.Define("pass_quality", selc::passesQualityCuts,
-                                     {"pass_flash",
-                                      "pass_fv",
-                                      "pass_topo"});
+    auto quality_df = topo_df.Define(
+        "pass_quality",
+        [](bool pass_flash, bool pass_fv, bool pass_topo) {
+            return selc::passesQualityCuts(pass_flash, pass_fv, pass_topo);
+        },
+        {"pass_flash",
+         "pass_fv",
+         "pass_topo"});
 
     auto final_df = quality_df.Define("pass_mu", "n_muons_tot > 0")
                               .Define(
