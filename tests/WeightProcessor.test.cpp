@@ -13,6 +13,7 @@
 #include <vector>
 
 using proc::SampleOrigin;
+using proc::WeightProcessor;
 
 namespace {
 
