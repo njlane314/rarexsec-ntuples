@@ -160,3 +160,10 @@ The `HubDataFrame` helper resolves the shard catalogue, builds the underlying `T
 ```bash
 root -l hub_example.C
 ```
+
+When launching ROOT from the repository directory the bundled `rootlogon.C`
+macro runs automatically to load the `librarexsec_processing` library. This
+keeps example macros concise. If ROOT still reports unresolved symbols, build
+the project so the shared library is available or set the
+`RAREXSEC_PROCESSING_LIBRARY` environment variable to the compiled library's
+absolute path before starting ROOT.
