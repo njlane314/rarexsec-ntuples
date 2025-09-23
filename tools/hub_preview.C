@@ -9,6 +9,7 @@
 #include "ROOT/RDFHelpers.hxx"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -16,6 +17,38 @@
 #include <vector>
 
 namespace {
+
+constexpr unsigned int kPreviewRowLimit = 5;
+
+template <typename DataFrame>
+void preview_columns(DataFrame &df, const std::vector<std::string> &candidates,
+                     const std::string &label, unsigned int row_limit = kPreviewRowLimit) {
+    std::vector<std::string> available_columns;
+    available_columns.reserve(candidates.size());
+
+    auto capitalised_label = label;
+    if (!capitalised_label.empty()) {
+        capitalised_label[0] = std::toupper(static_cast<unsigned char>(capitalised_label[0]));
+    }
+
+    for (const auto &name : candidates) {
+        if (df.HasColumn(name)) {
+            available_columns.push_back(name);
+        } else {
+            std::cout << "[info] " << capitalised_label << " column '" << name
+                      << "' not found in this hub\n";
+        }
+    }
+
+    if (!available_columns.empty()) {
+        std::cout << "Preview of " << label << " columns:\n";
+        auto preview = df.Display(available_columns, row_limit);
+        preview->Print();
+        std::cout << '\n';
+    } else {
+        std::cout << "[warning] No " << label << " columns were available to preview\n\n";
+    }
+}
 
 bool ensure_processing_library_available() {
     static bool initialised = false;
@@ -98,41 +131,11 @@ void hub_preview() {
 
         const std::vector<std::string> dataset_candidates = {
             "run", "sub", "evt", "reco_neutrino_energy", "reco_neutrino_vertex_z"};
-        std::vector<std::string> dataset_columns;
-        for (const auto &name : dataset_candidates) {
-            if (df.HasColumn(name)) {
-                dataset_columns.push_back(name);
-            } else {
-                std::cout << "[info] Dataset column '" << name << "' not found in this hub\n";
-            }
-        }
-        if (!dataset_columns.empty()) {
-            std::cout << "Preview of dataset columns:\n";
-            auto preview = df.Display(dataset_columns, 5);
-            preview->Print();
-            std::cout << '\n';
-        } else {
-            std::cout << "[warning] None of the example dataset columns are available to preview\n\n";
-        }
+        preview_columns(df, dataset_candidates, "dataset");
 
         const std::vector<std::string> friend_candidates = {
             "event_uid", "w_nom", "base_sel", "is_mc", "sampvar_uid"};
-        std::vector<std::string> friend_columns;
-        for (const auto &name : friend_candidates) {
-            if (df.HasColumn(name)) {
-                friend_columns.push_back(name);
-            } else {
-                std::cout << "[info] Friend column '" << name << "' not found in this hub\n";
-            }
-        }
-        if (!friend_columns.empty()) {
-            std::cout << "Preview of friend metadata columns:\n";
-            auto friend_preview = df.Display(friend_columns, 5);
-            friend_preview->Print();
-            std::cout << '\n';
-        } else {
-            std::cout << "[warning] No friend metadata columns were available\n\n";
-        }
+        preview_columns(df, friend_candidates, "friend metadata");
 
     } catch (const std::exception &ex) {
         std::cerr << "Failed to load hub selection: " << ex.what() << '\n';
