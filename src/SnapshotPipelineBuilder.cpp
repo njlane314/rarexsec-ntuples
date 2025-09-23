@@ -67,16 +67,13 @@ static std::string variationLabelOrKey(const proc::VariationDescriptor &vd) {
 
 constexpr const char *kInputTreeName = "nuselection/EventSelectionFilter";
 
+static ULong64_t buildEventUid(ULong64_t run, ULong64_t sub, ULong64_t evt) {
+    return (run << 42U) | (sub << 21U) | evt;
+}
+
 static ROOT::RDF::RNode configureFriendNode(ROOT::RDF::RNode df, bool is_mc, uint64_t sampvar_uid) {
     if (df.HasColumn("run") && df.HasColumn("sub") && df.HasColumn("evt")) {
-        df = df.Define("event_uid",
-                       [](const auto run, const auto sub, const auto evt) {
-                           const auto run_u = static_cast<ULong64_t>(run);
-                           const auto sub_u = static_cast<ULong64_t>(sub);
-                           const auto evt_u = static_cast<ULong64_t>(evt);
-                           return (run_u << 42U) | (sub_u << 21U) | evt_u;
-                       },
-                       {"run", "sub", "evt"});
+        df = df.Define("event_uid", buildEventUid, {"run", "sub", "evt"});
     } else {
         df = df.Define("event_uid", []() { return 0ULL; });
     }
