@@ -5,7 +5,7 @@ APPS_BUILD_DIR ?= build-apps
 CONFIGURE_FLAGS ?=
 INSTALL_FLAGS ?=
 
-.PHONY: all configure build install test clean distclean \
+.PHONY: all configure build install clean distclean \
 configure-lib build-lib install-lib clean-lib distclean-lib \
 configure-apps build-apps install-apps clean-apps distclean-apps
 
@@ -19,9 +19,6 @@ build: configure
 
 install: build
 	$(CMAKE) --install $(BUILD_DIR) $(INSTALL_FLAGS)
-
-test: build
-	ctest --test-dir $(BUILD_DIR) --output-on-failure
 
 clean:
 	-$(CMAKE) --build $(BUILD_DIR) --target clean
