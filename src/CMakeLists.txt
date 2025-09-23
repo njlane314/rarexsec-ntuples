@@ -17,6 +17,7 @@ set(rarexsec_processing_sources
 )
 
 set(rarexsec_processing_dictionary_headers
+    ${PROJECT_SOURCE_DIR}/include/rarexsec/HubDataFrame.h
     ${PROJECT_SOURCE_DIR}/include/rarexsec/TruthDerived.h
 )
 
