@@ -188,4 +188,8 @@ class HubDataFrame {
 
 } // namespace proc
 
+#if defined(RAREXSEC_HEADER_ONLY) && RAREXSEC_HEADER_ONLY
+#include <rarexsec/detail/HubDataFrameImpl.h>
+#endif
+
 #endif
