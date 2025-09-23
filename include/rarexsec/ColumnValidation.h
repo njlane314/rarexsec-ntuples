@@ -13,7 +13,7 @@ namespace proc {
 
 enum class ColumnRequirement { kRequired, kOptional };
 
-std::vector<std::string> collectMissingColumns(const ROOT::RDF::RNode &df,
+std::vector<std::string> collectMissingColumns(ROOT::RDF::RNode &df,
                                                const std::vector<std::string> &columns);
 
 void reportMissingColumns(const SampleKey &sample_key, const std::string &rel_path, SampleOrigin origin,
