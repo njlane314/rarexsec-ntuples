@@ -67,8 +67,9 @@ static std::string variationLabelOrKey(const proc::VariationDescriptor &vd) {
 
 constexpr const char *kInputTreeName = "nuselection/EventSelectionFilter";
 
-static ULong64_t buildEventUid(ULong64_t run, ULong64_t sub, ULong64_t evt) {
-    return (run << 42U) | (sub << 21U) | evt;
+static ULong64_t buildEventUid(int run, int sub, int evt) {
+    return (static_cast<ULong64_t>(run) << 42U) | (static_cast<ULong64_t>(sub) << 21U) |
+           static_cast<ULong64_t>(evt);
 }
 
 static ROOT::RDF::RNode configureFriendNode(ROOT::RDF::RNode df, bool is_mc, uint64_t sampvar_uid) {
