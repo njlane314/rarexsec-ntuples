@@ -21,7 +21,7 @@ set(rarexsec_processing_dictionary_headers
     ${PROJECT_SOURCE_DIR}/include/rarexsec/TruthDerived.h
 )
 
-add_library(rarexsec_processing)
+add_library(rarexsec_processing SHARED)
 add_library(rarexsec::processing ALIAS rarexsec_processing)
 
 target_sources(rarexsec_processing
