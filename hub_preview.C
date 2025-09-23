@@ -1,6 +1,6 @@
-// Run with: root -l -q 'tools/hub_preview.C'
+// Run with: root -l -q 'hub_preview.C'
 
-#include "../include/rarexsec/HubDataFrame.h"
+#include "include/rarexsec/HubDataFrame.h"
 
 #include "TInterpreter.h"
 #include "TSystem.h"
