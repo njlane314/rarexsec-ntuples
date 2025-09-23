@@ -10,7 +10,7 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
     auto pre_df = trigger_df.Define(
         "pass_pre",
         [st](float pe_beam, float pe_veto, bool swtrig) {
-            return selc::passesDatasetGate(st, pe_beam, pe_veto) && swtrig;
+            return selc::passesDatasetGateWithTrigger(st, pe_beam, pe_veto, swtrig, /*only_mc=*/false);
         },
         {"optical_filter_pe_beam",
          "optical_filter_pe_veto",
@@ -31,14 +31,34 @@ ROOT::RDF::RNode PreselectionProcessor::process(ROOT::RDF::RNode df, SampleOrigi
                                   "slice_cluster_fraction"})
                          .Define(
                              "pass_final",
-                             [](bool pre, bool flash, bool fv, bool mu, bool topo) {
-                                 return pre && flash && fv && mu && topo;
+                             [st](float pe_beam, float pe_veto, bool swtrig, int num_slices, float topo, float x, float y,
+                                  float z, bool mu, float contained_fraction, float slice_cluster_fraction) {
+                                 const bool quality = selc::passesQualityCuts(st,
+                                                                              pe_beam,
+                                                                              pe_veto,
+                                                                              swtrig,
+                                                                              num_slices,
+                                                                              topo,
+                                                                              x,
+                                                                              y,
+                                                                              z,
+                                                                              contained_fraction,
+                                                                              slice_cluster_fraction,
+                                                                              /*only_mc=*/false,
+                                                                              /*require_trigger=*/true);
+                                 return quality && mu;
                              },
-                             {"pass_pre",
-                              "pass_flash",
-                              "pass_fv",
+                             {"optical_filter_pe_beam",
+                              "optical_filter_pe_veto",
+                              "software_trigger",
+                              "num_slices",
+                              "topological_score",
+                              "reco_neutrino_vertex_sce_x",
+                              "reco_neutrino_vertex_sce_y",
+                              "reco_neutrino_vertex_sce_z",
                               "pass_mu",
-                              "pass_topo"});
+                              "contained_fraction",
+                              "slice_cluster_fraction"});
 
     return final_df;
 }

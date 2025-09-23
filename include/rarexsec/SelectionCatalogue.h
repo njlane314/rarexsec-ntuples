@@ -41,12 +41,30 @@ inline bool passesDatasetGate(SampleOrigin origin, float pe_beam, float pe_veto,
     return gate_pass;
 }
 
+inline bool passesDatasetGateWithTrigger(SampleOrigin origin, float pe_beam, float pe_veto, bool software_trigger,
+                                         bool only_mc = false) {
+    return passesDatasetGate(origin, pe_beam, pe_veto, only_mc) && software_trigger;
+}
+
 inline bool isSingleGoodSlice(int num_slices, float topological_score) {
     return num_slices == 1 && topological_score > 0.06f;
 }
 
 inline bool passesSliceQuality(float contained_fraction, float cluster_fraction) {
     return contained_fraction >= 0.7f && cluster_fraction >= 0.5f;
+}
+
+inline bool passesQualityCuts(SampleOrigin origin, float pe_beam, float pe_veto, bool software_trigger,
+                              int num_slices, float topological_score, float vertex_x, float vertex_y, float vertex_z,
+                              float contained_fraction, float slice_cluster_fraction, bool only_mc,
+                              bool require_trigger) {
+    const bool dataset_gate = require_trigger
+                                  ? passesDatasetGateWithTrigger(origin, pe_beam, pe_veto, software_trigger, only_mc)
+                                  : passesDatasetGate(origin, pe_beam, pe_veto, only_mc);
+    const bool basic_reco = isSingleGoodSlice(num_slices, topological_score);
+    const bool fiducial = isInFiducialVolumeWithGap(vertex_x, vertex_y, vertex_z);
+    const bool slice_quality = passesSliceQuality(contained_fraction, slice_cluster_fraction);
+    return dataset_gate && basic_reco && fiducial && slice_quality;
 }
 
 template <typename PlaneHitsU, typename PlaneHitsV, typename PlaneHitsY>

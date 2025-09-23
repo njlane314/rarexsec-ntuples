@@ -17,16 +17,25 @@ ROOT::RDF::RNode ReconstructionProcessor::process(ROOT::RDF::RNode df, SampleOri
 
     auto quality_df = trigger_df.Define(
         "quality_event",
-        [st](float pe_beam, float pe_veto, int num_slices, float topo, float x, float y, float z, float contained_frac,
-             float associated_frac) {
-            const bool dataset_gate = selc::passesDatasetGate(st, pe_beam, pe_veto, true);
-            const bool basic_reco = selc::isSingleGoodSlice(num_slices, topo);
-            const bool fv = selc::isInFiducialVolumeWithGap(x, y, z);
-            const bool slice_quality = selc::passesSliceQuality(contained_frac, associated_frac);
-            return dataset_gate && basic_reco && fv && slice_quality;
+        [st](float pe_beam, float pe_veto, bool swtrig, int num_slices, float topo, float x, float y, float z,
+             float contained_frac, float associated_frac) {
+            return selc::passesQualityCuts(st,
+                                           pe_beam,
+                                           pe_veto,
+                                           swtrig,
+                                           num_slices,
+                                           topo,
+                                           x,
+                                           y,
+                                           z,
+                                           contained_frac,
+                                           associated_frac,
+                                           /*only_mc=*/true,
+                                           /*require_trigger=*/false);
         },
         {"optical_filter_pe_beam",
          "optical_filter_pe_veto",
+         "software_trigger",
          "num_slices",
          "topological_score",
          "reco_neutrino_vertex_sce_x",
