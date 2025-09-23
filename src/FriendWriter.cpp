@@ -30,10 +30,7 @@ std::filesystem::path FriendWriter::writeFriend(ROOT::RDF::RNode df,
     opt.fOverwriteIfExists = true;
 
     auto path = generateFriendPath(sample_key, variation);
-    auto snapshot = df.Snapshot("meta", path.string(), columns, opt);
-    snapshot.GetValue();
-
-    return path;
+    return writeFriendToPath(df, path, columns);
 }
 
 std::filesystem::path FriendWriter::generateFriendPath(const std::string &sample_key,
@@ -41,6 +38,33 @@ std::filesystem::path FriendWriter::generateFriendPath(const std::string &sample
     std::ostringstream filename;
     filename << sample_key << "_" << variation << "_friend.root";
     return config_.output_dir / filename.str();
+}
+
+std::filesystem::path FriendWriter::writeFriendToPath(ROOT::RDF::RNode df,
+                                                      const std::filesystem::path &path,
+                                                      const std::vector<std::string> &columns) const {
+    ROOT::RDF::RSnapshotOptions opt;
+    opt.fCompressionAlgorithm = config_.compression_algo;
+    opt.fCompressionLevel = config_.compression_level;
+    opt.fAutoFlush = -30 * 1024 * 1024;
+    opt.fSplitLevel = 0;
+    opt.fOverwriteIfExists = true;
+
+    std::filesystem::path resolved = path;
+    const auto parent = resolved.parent_path();
+    if (!parent.empty()) {
+        std::error_code dir_ec;
+        std::filesystem::create_directories(parent, dir_ec);
+        if (dir_ec) {
+            log::info("FriendWriter", "[warning]", "Failed to ensure friend parent directory", parent.string(),
+                      ":", dir_ec.message());
+        }
+    }
+
+    auto snapshot = df.Snapshot(config_.tree_name, resolved.string(), columns, opt);
+    snapshot.GetValue();
+
+    return resolved;
 }
 
 } // namespace proc

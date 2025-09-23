@@ -11,8 +11,12 @@
 #include <string>
 #include <system_error>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
+#include <tuple>
+#include <iterator>
 
 #include <ROOT/RDataFrame.hxx>
 #include <TChain.h>
@@ -20,6 +24,7 @@
 namespace {
 constexpr const char *kCatalogTreeName = "entries";
 constexpr const char *kMetaTreeName = "hub_meta";
+constexpr const char *kFriendLinkTreeName = "entry_friends";
 
 bool matchesValue(const std::optional<std::string> &selector, const std::string &value) {
     return !selector || value == *selector;
@@ -222,40 +227,66 @@ ROOT::RDF::RNode HubDataFrame::buildDataFrame(const std::vector<const CatalogEnt
         log::info("HubDataFrame", "[warning]", "Hub catalog lists mixed dataset tree names; using", dataset_tree);
     }
 
-    std::string resolved_friend_tree = summary_.friend_tree;
-    bool friend_tree_seen = false;
-    for (const auto *entry : entries) {
-        if (entry->friend_tree.empty()) {
-            continue;
-        }
-        if (!friend_tree_seen) {
-            resolved_friend_tree = entry->friend_tree;
-            friend_tree_seen = true;
-            continue;
-        }
-        if (entry->friend_tree != resolved_friend_tree) {
-            log::info("HubDataFrame", "[warning]", "Hub catalog lists mixed friend tree names; using",
-                      resolved_friend_tree);
-            break;
-        }
-    }
-
     current_chain_ = std::make_unique<TChain>(dataset_tree.c_str());
-    friend_chain_ = std::make_unique<TChain>(resolved_friend_tree.c_str());
+    friend_chains_.clear();
+    friend_chains_.reserve(4);
+    std::vector<std::unordered_set<std::string>> friend_chain_paths;
 
     for (const auto *entry : entries) {
         const auto dataset_path = resolveDatasetPath(*entry);
         current_chain_->Add(dataset_path.string().c_str());
 
-        if (!entry->friend_path.empty()) {
-            const auto friend_path = resolveFriendPath(*entry);
-            friend_chain_->Add(friend_path.string().c_str());
+        for (const auto &friend_info : entry->friends) {
+            if (friend_info.path.empty()) {
+                continue;
+            }
+
+            const auto friend_path = resolveFriendPath(friend_info.path);
+            if (friend_path.empty()) {
+                continue;
+            }
+
+            const std::string key = friend_info.tree + std::string(1, '\0') + friend_info.label;
+            auto it = std::find_if(friend_chains_.begin(), friend_chains_.end(),
+                                   [&](const FriendChain &chain) { return chain.key == key; });
+            if (it == friend_chains_.end()) {
+                FriendChain chain;
+                chain.chain = std::make_unique<TChain>(friend_info.tree.c_str());
+                chain.alias = friend_info.label;
+                chain.key = key;
+                friend_chains_.push_back(std::move(chain));
+                friend_chain_paths.emplace_back();
+                it = std::prev(friend_chains_.end());
+            }
+
+            auto idx = static_cast<std::size_t>(std::distance(friend_chains_.begin(), it));
+            auto &path_set = friend_chain_paths[idx];
+            const auto generic = friend_path.generic_string();
+            if (!path_set.insert(generic).second) {
+                continue;
+            }
+
+            it->chain->Add(generic.c_str());
         }
     }
 
-    if (friend_chain_->GetListOfFiles()->GetEntries() > 0) {
-        current_chain_->AddFriend(friend_chain_.get());
-    } else {
+    int attached_friends = 0;
+    for (auto &friend_chain : friend_chains_) {
+        if (!friend_chain.chain) {
+            continue;
+        }
+        if (friend_chain.chain->GetListOfFiles()->GetEntries() == 0) {
+            continue;
+        }
+        if (!friend_chain.alias.empty()) {
+            current_chain_->AddFriend(friend_chain.chain.get(), friend_chain.alias.c_str());
+        } else {
+            current_chain_->AddFriend(friend_chain.chain.get());
+        }
+        ++attached_friends;
+    }
+
+    if (attached_friends == 0) {
         log::info("HubDataFrame", "[warning]", "No friend trees available for selection", first.beam, first.period,
                   first.variation, first.origin, first.stage);
     }
@@ -293,14 +324,18 @@ std::filesystem::path HubDataFrame::resolveDatasetPath(const CatalogEntry &entry
 }
 
 std::filesystem::path HubDataFrame::resolveFriendPath(const CatalogEntry &entry) const {
-    if (entry.friend_path.empty()) {
+    return resolveFriendPath(entry.friend_path);
+}
+
+std::filesystem::path HubDataFrame::resolveFriendPath(const std::string &friend_path) const {
+    if (friend_path.empty()) {
         return {};
     }
-    std::filesystem::path friend_path(entry.friend_path);
-    if (friend_path.is_absolute()) {
-        return friend_path;
+    std::filesystem::path path(friend_path);
+    if (path.is_absolute()) {
+        return path;
     }
-    return std::filesystem::path(hub_directory_) / friend_path;
+    return std::filesystem::path(hub_directory_) / path;
 }
 
 void HubDataFrame::setBaseDirectoryOverride(const std::filesystem::path &path) {
@@ -437,12 +472,88 @@ void HubDataFrame::loadCatalog() {
             entry.origin = (i < origins.size()) ? origins[i] : std::string{};
             entry.stage = (i < stages.size()) ? stages[i] : std::string{};
 
+            entry.friends.clear();
+            if (!entry.friend_path.empty()) {
+                entry.friends.push_back(CatalogEntry::FriendInfo{"", entry.friend_tree, entry.friend_path});
+            }
+
             entries_.push_back(std::move(entry));
         }
     } catch (const std::exception &ex) {
         log::info("HubDataFrame", "[warning]", "Unable to load hub catalogue:", ex.what());
         entries_.clear();
     }
+
+    if (!entries_.empty()) {
+        loadFriendMetadata();
+    }
+}
+
+void HubDataFrame::loadFriendMetadata() {
+    try {
+        ROOT::RDataFrame friend_df(kFriendLinkTreeName, hub_path_);
+        auto entry_ids = friend_df.Take<UInt_t>("entry_id").GetValue();
+        auto labels = friend_df.Take<std::string>("label").GetValue();
+        auto trees = friend_df.Take<std::string>("tree").GetValue();
+        auto paths = friend_df.Take<std::string>("path").GetValue();
+
+        std::unordered_map<std::uint32_t, std::vector<CatalogEntry::FriendInfo>> friend_map;
+        const std::size_t count = entry_ids.size();
+        friend_map.reserve(count);
+        for (std::size_t i = 0; i < count; ++i) {
+            CatalogEntry::FriendInfo info;
+            info.label = (i < labels.size()) ? labels[i] : std::string{};
+            info.tree = (i < trees.size()) ? trees[i] : std::string{};
+            info.path = (i < paths.size()) ? paths[i] : std::string{};
+            friend_map[static_cast<std::uint32_t>(entry_ids[i])].push_back(std::move(info));
+        }
+
+        for (auto &entry : entries_) {
+            auto it = friend_map.find(entry.entry_id);
+            if (it == friend_map.end()) {
+                continue;
+            }
+            for (const auto &info : it->second) {
+                if (info.path.empty()) {
+                    continue;
+                }
+                const bool duplicate = std::any_of(entry.friends.begin(), entry.friends.end(),
+                                                   [&](const CatalogEntry::FriendInfo &existing) {
+                                                       return existing.path == info.path &&
+                                                              existing.tree == info.tree &&
+                                                              existing.label == info.label;
+                                                   });
+                if (!duplicate) {
+                    entry.friends.push_back(info);
+                }
+            }
+        }
+    } catch (const std::exception &ex) {
+        log::info("HubDataFrame", "[warning]", "Unable to load friend metadata:", ex.what());
+    }
+}
+
+std::vector<HubDataFrame::Combination> HubDataFrame::getAllCombinations() const {
+    std::vector<Combination> combinations;
+    combinations.reserve(entries_.size());
+
+    std::set<std::tuple<std::string, std::string, std::string, std::string, std::string, std::string>> seen;
+    for (const auto &entry : entries_) {
+        auto key = std::make_tuple(entry.sample_key, entry.beam, entry.period, entry.variation, entry.origin, entry.stage);
+        if (!seen.insert(key).second) {
+            continue;
+        }
+        Combination combo;
+        combo.sample_key = entry.sample_key;
+        combo.beam = entry.beam;
+        combo.period = entry.period;
+        combo.variation = entry.variation;
+        combo.origin = entry.origin;
+        combo.stage = entry.stage;
+        combinations.push_back(std::move(combo));
+    }
+
+    return combinations;
 }
 
 std::vector<std::string> HubDataFrame::beams() const {

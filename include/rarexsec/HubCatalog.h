@@ -45,13 +45,25 @@ struct HubEntry {
     std::string stage;
 };
 
+struct HubFriend {
+    UInt_t entry_id = 0U;
+    std::string label;
+    std::string tree;
+    std::string path;
+};
+
 class HubCatalog {
   public:
-    explicit HubCatalog(const std::string &hub_path, bool create = false);
+    enum class OpenMode { Read, Update, Recreate };
+
+    explicit HubCatalog(const std::string &hub_path, OpenMode mode = OpenMode::Read);
     ~HubCatalog();
 
     void addEntry(const HubEntry &entry);
     void addEntries(const std::vector<HubEntry> &entries);
+
+    void addFriend(const HubFriend &friend_entry);
+    void addFriends(const std::vector<HubFriend> &friend_entries);
 
     void writeDictionaries(const ProvenanceDicts &dicts);
     void writeSummary(double total_pot, long total_triggers, const std::string &base_directory,
@@ -62,9 +74,11 @@ class HubCatalog {
     std::unique_ptr<TFile> file_;
     TTree *catalog_tree_;
     TTree *meta_tree_;
+    TTree *friend_tree_;
     mutable std::mutex mutex_;
 
     HubEntry current_entry_;
+    HubFriend current_friend_;
     UInt_t next_entry_id_;
     std::string meta_key_;
     std::string meta_value_;
