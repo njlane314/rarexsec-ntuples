@@ -171,7 +171,7 @@ std::vector<std::string> requestedFriendColumns() {
     return unique;
 }
 
-std::vector<std::string> selectAvailableFriendColumns(const std::vector<ROOT::RDF::RNode> &nodes,
+std::vector<std::string> selectAvailableFriendColumns(std::vector<ROOT::RDF::RNode> &nodes,
                                                       const std::vector<std::string> &candidates) {
     if (nodes.empty()) {
         return baseFriendColumns();
@@ -180,7 +180,7 @@ std::vector<std::string> selectAvailableFriendColumns(const std::vector<ROOT::RD
     std::vector<std::string> selected;
     selected.reserve(candidates.size());
     for (const auto &column : candidates) {
-        const bool available = std::all_of(nodes.begin(), nodes.end(), [&](const ROOT::RDF::RNode &node) {
+        const bool available = std::all_of(nodes.begin(), nodes.end(), [&](ROOT::RDF::RNode &node) {
             return node.HasColumn(column);
         });
         if (available) {
