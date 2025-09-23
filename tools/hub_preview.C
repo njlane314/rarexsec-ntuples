@@ -1,6 +1,6 @@
 // Run with: root -l -q 'tools/hub_preview.C'
 
-#include <rarexsec/HubDataFrame.h>
+#include "../include/rarexsec/HubDataFrame.h"
 
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
