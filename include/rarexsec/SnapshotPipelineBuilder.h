@@ -77,15 +77,18 @@ class SnapshotPipelineBuilder {
         std::string period;
         std::string stage;
         std::string origin_label;
+        std::string dataset_path;
+        std::string dataset_tree;
         double pot;
         long triggers;
+        bool is_nominal;
     };
 
     void loadAll();
     void processRunConfig(const RunConfig &rc);
 
     void snapshotToHub(const std::string &hub_path,
-                       const std::vector<std::string> &final_columns,
+                       const std::vector<std::string> &friend_columns,
                        std::vector<ROOT::RDF::RNode> &nodes, const std::vector<Combo> &combos,
                        const ProvenanceDicts &dicts) const;
 };

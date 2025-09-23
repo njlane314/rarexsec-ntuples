@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -12,12 +13,40 @@
 #include <TChain.h>
 
 namespace {
-constexpr const char *kCatalogTreeName = "shards";
+constexpr const char *kCatalogTreeName = "entries";
+constexpr const char *kMetaTreeName = "hub_meta";
 }
 
 namespace proc {
 
-HubDataFrame::HubDataFrame(const std::string &hub_path) : hub_path_(hub_path) {}
+HubDataFrame::HubDataFrame(const std::string &hub_path)
+    : hub_path_(hub_path), friend_tree_name_("meta") {
+    try {
+        ROOT::RDataFrame meta_df(kMetaTreeName, hub_path_);
+        auto keys_result = meta_df.Take<std::string>("key");
+        auto values_result = meta_df.Take<std::string>("value");
+        const auto keys = keys_result.GetValue();
+        const auto values = values_result.GetValue();
+
+        for (std::size_t i = 0; i < keys.size(); ++i) {
+            if (keys[i] == "summary") {
+                try {
+                    const auto summary = nlohmann::json::parse(values[i]);
+                    if (summary.contains("base_directory")) {
+                        base_directory_ = summary.at("base_directory").get<std::string>();
+                    }
+                    if (summary.contains("friend_tree")) {
+                        friend_tree_name_ = summary.at("friend_tree").get<std::string>();
+                    }
+                } catch (const std::exception &ex) {
+                    log::info("HubDataFrame", "[warning]", "Failed to parse hub summary metadata:", ex.what());
+                }
+            }
+        }
+    } catch (const std::exception &ex) {
+        log::info("HubDataFrame", "[warning]", "Unable to load hub metadata:", ex.what());
+    }
+}
 
 ROOT::RDF::RNode HubDataFrame::query(const std::string &beam,
                                       const std::string &period,
@@ -47,35 +76,79 @@ ROOT::RDF::RNode HubDataFrame::query(const std::string &beam,
         },
         {"beam", "period", "variation", "origin", "stage"});
 
-    auto shard_paths_result = filtered.Take<std::string>("shard_path");
-    auto tree_names_result = filtered.Take<std::string>("tree_name");
+    auto dataset_paths_result = filtered.Take<std::string>("dataset_path");
+    auto dataset_trees_result = filtered.Take<std::string>("dataset_tree");
+    auto friend_paths_result = filtered.Take<std::string>("friend_path");
+    auto friend_trees_result = filtered.Take<std::string>("friend_tree");
 
-    auto shard_paths = shard_paths_result.GetValue();
-    auto tree_names = tree_names_result.GetValue();
+    auto dataset_paths = dataset_paths_result.GetValue();
+    auto dataset_trees = dataset_trees_result.GetValue();
+    auto friend_paths = friend_paths_result.GetValue();
+    auto friend_trees = friend_trees_result.GetValue();
 
-    if (shard_paths.empty()) {
-        throw std::runtime_error("No shards matched the requested selection");
+    if (dataset_paths.empty()) {
+        throw std::runtime_error("No hub entries matched the requested selection");
     }
 
-    const std::string tree_name = tree_names.empty() ? std::string{"events"} : tree_names.front();
-    const bool consistent_tree = std::all_of(tree_names.begin(), tree_names.end(),
-                                             [&](const std::string &name) { return name == tree_name; });
-    if (!consistent_tree) {
-        log::info("HubDataFrame", "[warning]", "Shard catalog lists mixed tree names; using", tree_name);
+    const std::string dataset_tree = dataset_trees.empty() ? std::string{"events"} : dataset_trees.front();
+    const bool consistent_dataset_tree =
+        std::all_of(dataset_trees.begin(), dataset_trees.end(),
+                    [&](const std::string &name) { return name == dataset_tree; });
+    if (!consistent_dataset_tree) {
+        log::info("HubDataFrame", "[warning]", "Hub catalog lists mixed dataset tree names; using", dataset_tree);
     }
 
-    current_chain_ = std::make_unique<TChain>(tree_name.c_str());
-    const std::filesystem::path hub_dir = std::filesystem::absolute(std::filesystem::path(hub_path_)).parent_path();
-
-    for (const auto &path : shard_paths) {
-        std::filesystem::path shard_path(path);
-        if (shard_path.is_relative()) {
-            shard_path = hub_dir / shard_path;
+    std::string resolved_friend_tree = friend_tree_name_;
+    if (!friend_trees.empty() && !friend_trees.front().empty()) {
+        const bool consistent_friend_tree =
+            std::all_of(friend_trees.begin(), friend_trees.end(),
+                        [&](const std::string &name) { return name == friend_trees.front(); });
+        if (!consistent_friend_tree) {
+            log::info("HubDataFrame", "[warning]", "Hub catalog lists mixed friend tree names; using", friend_trees.front());
         }
-        current_chain_->Add(shard_path.string().c_str());
+        resolved_friend_tree = friend_trees.front();
     }
 
-    log::info("HubDataFrame", "Loaded", shard_paths.size(), "shards for", beam, period, variation, origin, stage);
+    current_chain_ = std::make_unique<TChain>(dataset_tree.c_str());
+    friend_chain_ = std::make_unique<TChain>(resolved_friend_tree.c_str());
+
+    const std::filesystem::path hub_dir = std::filesystem::absolute(std::filesystem::path(hub_path_)).parent_path();
+    std::filesystem::path base_dir_path;
+    if (!base_directory_.empty()) {
+        base_dir_path = std::filesystem::path(base_directory_);
+        if (base_dir_path.is_relative()) {
+            base_dir_path = std::filesystem::absolute(hub_dir / base_dir_path);
+        }
+    }
+
+    for (std::size_t i = 0; i < dataset_paths.size(); ++i) {
+        std::filesystem::path dataset_path(dataset_paths[i]);
+        if (dataset_path.is_relative()) {
+            if (!base_dir_path.empty()) {
+                dataset_path = base_dir_path / dataset_path;
+            } else {
+                dataset_path = hub_dir / dataset_path;
+            }
+        }
+        current_chain_->Add(dataset_path.string().c_str());
+
+        if (i < friend_paths.size()) {
+            std::filesystem::path friend_path(friend_paths[i]);
+            if (friend_path.is_relative()) {
+                friend_path = hub_dir / friend_path;
+            }
+            friend_chain_->Add(friend_path.string().c_str());
+        }
+    }
+
+    if (friend_chain_->GetListOfFiles()->GetEntries() > 0) {
+        current_chain_->AddFriend(friend_chain_.get());
+    } else {
+        log::info("HubDataFrame", "[warning]", "No friend trees available for selection", beam, period, variation, origin,
+                  stage);
+    }
+
+    log::info("HubDataFrame", "Loaded", dataset_paths.size(), "entries for", beam, period, variation, origin, stage);
     ROOT::RDataFrame df(*current_chain_);
     return df;
 }

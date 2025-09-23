@@ -11,6 +11,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -22,7 +23,7 @@
 #include <rarexsec/PreselectionProcessor.h>
 #include <rarexsec/ProcessorPipeline.h>
 #include <rarexsec/HubCatalog.h>
-#include <rarexsec/ShardWriter.h>
+#include <rarexsec/FriendWriter.h>
 #include <rarexsec/ReconstructionProcessor.h>
 #include <rarexsec/SampleTypes.h>
 #include <rarexsec/TruthChannelProcessor.h>
@@ -64,63 +65,50 @@ static std::string variationLabelOrKey(const proc::VariationDescriptor &vd) {
     return vd.variation_label.empty() ? proc::variationToKey(vd.variation) : vd.variation_label;
 }
 
-static ROOT::RDF::RNode defineProvenanceIDs(ROOT::RDF::RNode df, uint32_t sample_id, uint16_t beam_id,
-                                            uint16_t period_id, uint16_t stage_id, uint16_t variation_id,
-                                            uint8_t origin_id) {
-    return df.Define("sample_id", [sample_id]() { return sample_id; })
-        .Define("beam_id", [beam_id]() { return beam_id; })
-        .Define("period_id", [period_id]() { return period_id; })
-        .Define("stage_id", [stage_id]() { return stage_id; })
-        .Define("variation_id", [variation_id]() { return variation_id; })
-        .Define("origin_id", [origin_id]() { return origin_id; });
-}
+constexpr const char *kInputTreeName = "nuselection/EventSelectionFilter";
 
-static ROOT::RDF::RNode defineAnalysisAliases(ROOT::RDF::RNode df) {
-    const auto column_names = df.GetColumnNames();
-    const std::unordered_set<std::string> column_set(column_names.begin(), column_names.end());
-
-    const bool has_run = column_set.count("run") > 0;
-    const bool has_sub = column_set.count("sub") > 0;
-    const bool has_evt = column_set.count("evt") > 0;
-    if (has_run && has_sub && has_evt) {
+static ROOT::RDF::RNode configureFriendNode(ROOT::RDF::RNode df, bool is_mc, uint64_t sampvar_uid) {
+    if (df.HasColumn("run") && df.HasColumn("sub") && df.HasColumn("evt")) {
         df = df.Define("event_uid",
-                       "((ULong64_t)run << 42) | ((ULong64_t)sub << 21) | (ULong64_t)evt")
-                 .Define("rsub_key", "((ULong64_t)run << 20) | (ULong64_t)sub");
+                       [](ULong64_t run, ULong64_t sub, ULong64_t evt) {
+                           return (run << 42U) | (sub << 21U) | evt;
+                       },
+                       {"run", "sub", "evt"});
     } else {
-        df = df.Define("event_uid", "0ULL").Define("rsub_key", "0ULL");
+        df = df.Define("event_uid", []() { return 0ULL; });
     }
 
-    if (column_set.count("passes_preselection") > 0) {
-        df = df.Alias("base_sel", "passes_preselection");
-    } else if (column_set.count("pure_slice_signal") > 0) {
-        df = df.Alias("base_sel", "pure_slice_signal");
-    } else if (column_set.count("in_fiducial") > 0) {
-        df = df.Alias("base_sel", "in_fiducial");
+    auto define_bool_alias = [](ROOT::RDF::RNode node, const std::string &target, const std::string &source) {
+        return node.Define(target, [](const auto &value) { return static_cast<bool>(value); }, {source});
+    };
+
+    if (df.HasColumn("passes_preselection")) {
+        df = define_bool_alias(df, "base_sel", "passes_preselection");
+    } else if (df.HasColumn("pure_slice_signal")) {
+        df = define_bool_alias(df, "base_sel", "pure_slice_signal");
+    } else if (df.HasColumn("in_fiducial")) {
+        df = define_bool_alias(df, "base_sel", "in_fiducial");
     } else {
-        df = df.Define("base_sel", "true");
+        df = df.Define("base_sel", []() { return true; });
     }
 
-    if (column_set.count("nominal_event_weight") > 0) {
-        df = df.Define("w_nom", "(double)nominal_event_weight");
-    } else if (column_set.count("base_event_weight") > 0) {
-        df = df.Define("w_nom", "(double)base_event_weight");
+    auto define_weight = [](ROOT::RDF::RNode node, const std::string &source) {
+        return node.Define("w_nom", [](const auto &value) { return static_cast<double>(value); }, {source});
+    };
+
+    if (df.HasColumn("nominal_event_weight")) {
+        df = define_weight(df, "nominal_event_weight");
+    } else if (df.HasColumn("base_event_weight")) {
+        df = define_weight(df, "base_event_weight");
     } else {
-        df = df.Define("w_nom", "1.0");
+        df = df.Define("w_nom", []() { return 1.0; });
     }
+
+    const ULong64_t friend_uid = static_cast<ULong64_t>(sampvar_uid);
+    df = df.Define("is_mc", [is_mc]() { return is_mc; })
+             .Define("sampvar_uid", [friend_uid]() { return friend_uid; });
 
     return df;
-}
-
-static ROOT::RDF::RNode defineDownstreamConvenience(ROOT::RDF::RNode df, uint32_t sample_id, uint16_t variation_id,
-                                                    bool is_mc, bool is_nominal, double sample_pot,
-                                                    long sample_triggers) {
-    const uint64_t svuid = (static_cast<uint64_t>(sample_id) << 16) | variation_id;
-    return df.Define("is_mc", [is_mc]() { return is_mc; })
-        .Define("is_nominal", [is_nominal]() { return is_nominal; })
-        .Define("sampvar_uid", [svuid]() { return svuid; })
-        .Define("sample_pot", [sample_pot]() { return sample_pot; })
-        .Define("sample_triggers",
-                [sample_triggers]() { return static_cast<ULong64_t>(sample_triggers); });
 }
 
 } // namespace
@@ -153,23 +141,16 @@ const RunConfig *SnapshotPipelineBuilder::getRunConfigForSample(const SampleKey 
 
 void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std::string &output_file,
                                        const std::vector<std::string> &columns) const {
-    // Deduplicate requested payload columns
-    std::vector<std::string> requested = columns;
-    {
-        std::unordered_set<std::string> seen;
-        std::vector<std::string> tmp;
-        tmp.reserve(requested.size());
-        for (auto &c : requested) {
-            if (seen.insert(c).second) {
-                tmp.emplace_back(std::move(c));
-            }
-        }
-        requested.swap(tmp);
+    if (!filter_expr.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                  "Selection filters are ignored when producing friend metadata:", filter_expr);
+    }
+    if (!columns.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[warning]",
+                  "Requested payload columns are ignored; friend trees use a fixed schema.");
     }
 
-    const std::string filter_description = filter_expr.empty() ? std::string{"<none>"} : filter_expr;
-    log::info("SnapshotPipelineBuilder::snapshot", "Preparing snapshot", output_file, "with", requested.size(),
-              "payload columns and filter", filter_description);
+    log::info("SnapshotPipelineBuilder::snapshot", "Preparing hub snapshot", output_file);
     log::info("SnapshotPipelineBuilder::snapshot", "Processing", frames_.size(), "samples");
 
     if (!frames_.empty()) {
@@ -239,6 +220,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     std::vector<Combo> combos;
     combos.reserve(frames_.size() * 4);
 
+    const std::vector<std::string> friend_columns = {"event_uid", "w_nom", "base_sel", "is_mc", "sampvar_uid"};
+
     for (const auto &[key, sample] : frames_) {
         const auto *rc = this->getRunConfigForSample(key);
         const std::string beam = rc ? rc->beamMode() : std::string{};
@@ -262,17 +245,12 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         // nominal
         {
             auto df = sample.nominalNode();
-            if (!filter_expr.empty()) {
-                df = df.Filter(filter_expr);
-            }
-            df = defineProvenanceIDs(df, sid, bid, pid, stg, vnom, oid);
-            df = defineAnalysisAliases(df);
-            df = defineDownstreamConvenience(df, sid, vnom, is_mc, /*is_nominal*/ true, sample.pot(),
-                                             sample.triggers());
+            df = configureFriendNode(df, is_mc, (static_cast<uint64_t>(sid) << 16) | vnom);
             nodes.emplace_back(df);
 
-            combos.push_back(Combo{sid, vnom, bid, pid, stg, oid, origin, key.str(), "nominal", beam, period,
-                                   stage, originToString(origin), sample.pot(), sample.triggers()});
+            combos.push_back(Combo{sid, vnom, bid, pid, stg, oid, origin, key.str(), "nominal", beam, period, stage,
+                                   originToString(origin), sample.relativePath(), kInputTreeName, sample.pot(),
+                                   sample.triggers(), true});
         }
 
         // variations
@@ -298,16 +276,12 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
                       key.str(), "stage", vstage_label);
 
             auto vdf = it->second;
-            if (!filter_expr.empty()) {
-                vdf = vdf.Filter(filter_expr);
-            }
-            vdf = defineProvenanceIDs(vdf, sid, vbid, vpid, vstg, vvid, oid);
-            vdf = defineAnalysisAliases(vdf);
-            vdf = defineDownstreamConvenience(vdf, sid, vvid, is_mc, /*is_nominal*/ false, vd.pot, vd.triggers);
+            vdf = configureFriendNode(vdf, is_mc, (static_cast<uint64_t>(sid) << 16) | vvid);
             nodes.emplace_back(vdf);
 
             combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, origin, key.str(), variation_label, vbeam,
-                                   vperiod, vstage, originToString(origin), vd.pot, vd.triggers});
+                                   vperiod, vstage, originToString(origin), vd.relative_path, kInputTreeName, vd.pot,
+                                   vd.triggers, false});
         }
     }
 
@@ -316,16 +290,10 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         return;
     }
 
-    log::info("SnapshotPipelineBuilder::snapshot", "Prepared", combos.size(), "dataframe nodes for snapshot");
+    log::info("SnapshotPipelineBuilder::snapshot", "Prepared", combos.size(),
+              "friend dataframe nodes for snapshot");
 
-    // Final columns (payload + provenance + helpers)
-    std::vector<std::string> final_cols = requested;
-    final_cols.insert(final_cols.end(),
-                      {"sample_id",       "beam_id",      "period_id",  "stage_id",   "variation_id",
-                       "origin_id",      "event_uid",    "rsub_key",   "base_sel",   "w_nom",
-                       "is_mc",          "is_nominal",   "sampvar_uid", "sample_pot", "sample_triggers"});
-
-    snapshotToHub(output_file, final_cols, nodes, combos, dicts);
+    snapshotToHub(output_file, friend_columns, nodes, combos, dicts);
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
@@ -334,7 +302,7 @@ void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std:
 }
 
 void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
-                                            const std::vector<std::string> &final_columns,
+                                            const std::vector<std::string> &friend_columns,
                                             std::vector<ROOT::RDF::RNode> &nodes,
                                             const std::vector<Combo> &combos,
                                             const ProvenanceDicts &dicts) const {
@@ -342,15 +310,16 @@ void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
 
     HubCatalog hub(hub_path, true);
     hub.writeDictionaries(dicts);
-    hub.writeSummary(total_pot_, total_triggers_);
+    const std::string friend_tree_name = "meta";
+    hub.writeSummary(total_pot_, total_triggers_, ntuple_base_directory_, friend_tree_name);
 
-    ShardWriter::ShardConfig shard_config;
+    FriendWriter::FriendConfig friend_config;
     const std::filesystem::path hub_dir = std::filesystem::absolute(std::filesystem::path(hub_path)).parent_path();
-    shard_config.output_dir = hub_dir / "shards";
+    friend_config.output_dir = hub_dir / "friends";
 
-    ShardWriter writer(shard_config);
+    FriendWriter writer(friend_config);
 
-    std::vector<std::future<std::vector<ShardEntry>>> futures;
+    std::vector<std::future<std::vector<HubEntry>>> futures;
     futures.reserve(nodes.size());
 
     for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
@@ -359,36 +328,70 @@ void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
             auto node = nodes[idx];
             const auto &combo = combos[idx];
 
-            log::info("SnapshotPipelineBuilder", "Materialising shard for", combo.sk, combo.vlab);
+            log::info("SnapshotPipelineBuilder", "Materialising friend metadata for", combo.sk, combo.vlab);
 
-            auto entries = writer.writeShards(node, combo.sk, combo.beam, combo.period, combo.vlab, combo.stage,
-                                              combo.origin_enum, combo.pot, combo.triggers, final_columns);
+            auto count = node.Count();
+            auto min_uid = node.Min<ULong64_t>("event_uid");
+            auto max_uid = node.Max<ULong64_t>("event_uid");
+            auto sum_weights = node.Sum<double>("w_nom");
 
-            for (auto &entry : entries) {
-                entry.sample_id = combo.sid;
-                entry.beam_id = combo.bid;
-                entry.period_id = combo.pid;
-                entry.variation_id = combo.vid;
-                entry.origin_id = combo.oid;
-                entry.pot = combo.pot;
-                entry.triggers = combo.triggers;
+            auto path = writer.writeFriend(node, combo.sk, combo.vlab, friend_columns);
+
+            const auto n_events = count.GetValue();
+            if (n_events == 0ULL) {
+                std::error_code remove_ec;
+                std::filesystem::remove(path, remove_ec);
+                if (remove_ec) {
+                    log::info("SnapshotPipelineBuilder", "[warning]", "Failed to remove empty friend tree",
+                              path.string(), remove_ec.message());
+                }
+                return std::vector<HubEntry>{};
             }
 
-            return entries;
+            HubEntry entry;
+            entry.sample_id = combo.sid;
+            entry.beam_id = combo.bid;
+            entry.period_id = combo.pid;
+            entry.variation_id = combo.vid;
+            entry.origin_id = combo.oid;
+            entry.dataset_path = combo.dataset_path;
+            entry.dataset_tree = combo.dataset_tree;
+
+            std::error_code rel_ec;
+            const auto relative_friend = std::filesystem::relative(path, hub_dir, rel_ec);
+            entry.friend_path = (rel_ec ? path : relative_friend).generic_string();
+            entry.friend_tree = friend_tree_name;
+
+            entry.n_events = n_events;
+            entry.first_event_uid = min_uid->GetValue();
+            entry.last_event_uid = max_uid->GetValue();
+            entry.sum_weights = sum_weights->GetValue();
+            entry.pot = combo.pot;
+            entry.triggers = combo.triggers;
+            entry.sample_key = combo.sk;
+            entry.beam = combo.beam;
+            entry.period = combo.period;
+            entry.variation = combo.vlab;
+            entry.origin = combo.origin_label;
+            entry.stage = combo.stage;
+
+            return std::vector<HubEntry>{std::move(entry)};
         }));
     }
 
-    std::vector<ShardEntry> all_entries;
+    std::vector<HubEntry> all_entries;
+    all_entries.reserve(nodes.size());
     for (auto &future : futures) {
         auto entries = future.get();
         all_entries.insert(all_entries.end(), std::make_move_iterator(entries.begin()),
                            std::make_move_iterator(entries.end()));
     }
 
-    hub.addShardEntries(all_entries);
+    hub.addEntries(all_entries);
     hub.finalize();
 
-    log::info("SnapshotPipelineBuilder", "Created", all_entries.size(), "shards referenced in hub:", hub_path);
+    log::info("SnapshotPipelineBuilder", "Created", all_entries.size(),
+              "hub entries with friend metadata:", hub_path);
 }
 
 void SnapshotPipelineBuilder::printAllBranches() const {

@@ -18,85 +18,6 @@
 
 namespace {
 
-const std::vector<std::string> &requestedSnapshotColumns() {
-    static const std::vector<std::string> columns = {
-        "run",
-        "sub",
-        "evt",
-        "nominal_event_weight",
-        "base_event_weight",
-        "inclusive_strange_channel_category",
-        "exclusive_strange_channel_category",
-        "channel_definition_category",
-        "interaction_mode_category",
-        "reco_neutrino_vertex_x",
-        "reco_neutrino_vertex_y",
-        "reco_neutrino_vertex_z",
-        "detector_image_u",
-        "detector_image_v",
-        "detector_image_w",
-        "semantic_image_u",
-        "semantic_image_v",
-        "semantic_image_w",
-        "event_detector_image_u",
-        "event_detector_image_v",
-        "event_detector_image_w",
-        "event_semantic_image_u",
-        "event_semantic_image_v",
-        "event_semantic_image_w",
-        "event_adc_u",
-        "event_adc_v",
-        "event_adc_w",
-        "slice_semantic_counts_u",
-        "slice_semantic_counts_v",
-        "slice_semantic_counts_w",
-        "event_semantic_counts_u",
-        "event_semantic_counts_v",
-        "event_semantic_counts_w",
-        "is_vtx_in_image_u",
-        "is_vtx_in_image_v",
-        "is_vtx_in_image_w"};
-
-    return columns;
-}
-
-std::vector<std::string> filterAvailableColumns(const proc::SnapshotPipelineBuilder::SampleFrameMap &frames,
-                                                const std::vector<std::string> &requested) {
-    std::vector<std::string> available;
-    available.reserve(requested.size());
-
-    for (const auto &column : requested) {
-        bool present_everywhere = true;
-        for (const auto &[sample_key, sample] : frames) {
-            (void)sample_key;
-            if (!sample.nominalNode().HasColumn(column)) {
-                present_everywhere = false;
-                break;
-            }
-            for (const auto &[variation, node] : sample.variationNodes()) {
-                (void)variation;
-                auto mutable_node = node;
-                if (!mutable_node.HasColumn(column)) {
-                    present_everywhere = false;
-                    break;
-                }
-            }
-            if (!present_everywhere) {
-                break;
-            }
-        }
-
-        if (present_everywhere) {
-            available.push_back(column);
-        } else {
-            proc::log::info("snapshot-analysis", "[warning]", "Omitting column", column,
-                            "because it is not available for every dataset");
-        }
-    }
-
-    return available;
-}
-
 } // namespace
 
 int main(int argc, char **argv) {
@@ -148,13 +69,6 @@ int main(int argc, char **argv) {
                                               *base_dir);
         if (options.output) {
             const std::string output_file = options.output->string();
-            auto columns = filterAvailableColumns(builder.getSampleFrames(), requestedSnapshotColumns());
-            if (columns.empty()) {
-                std::cerr << "None of the requested snapshot columns are available for the selected samples."
-                          << std::endl;
-                return 1;
-            }
-
             const std::string hub_suffix = ".hub.root";
             if (output_file.size() < hub_suffix.size() ||
                 output_file.compare(output_file.size() - hub_suffix.size(), hub_suffix.size(), hub_suffix) != 0) {
@@ -162,7 +76,7 @@ int main(int argc, char **argv) {
                                 "Hub outputs conventionally use the .hub.root suffix:", output_file);
             }
 
-            builder.snapshot(options.selection.value_or(""), output_file, columns);
+            builder.snapshot(options.selection.value_or(""), output_file, {});
             proc::log::info("snapshot-analysis", "Hub snapshot written to", output_file);
             std::cout << "Hub snapshot saved to: " << output_file << std::endl;
         } else {

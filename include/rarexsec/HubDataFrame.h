@@ -35,6 +35,9 @@ class HubDataFrame {
   private:
     std::string hub_path_;
     std::unique_ptr<TChain> current_chain_;
+    std::unique_ptr<TChain> friend_chain_;
+    std::string base_directory_;
+    std::string friend_tree_name_;
 };
 
 } // namespace proc
