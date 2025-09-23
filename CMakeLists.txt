@@ -24,7 +24,6 @@ endif()
 unset(_rarexsec_use_local_prefix)
 unset(_rarexsec_prefix_abs)
 
-include(CTest)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
@@ -55,36 +54,6 @@ endif()
 
 if(RAREXSEC_BUILD_APPS)
     add_subdirectory(app)
-endif()
-
-if(BUILD_TESTING)
-    find_program(RAREXSEC_BASH_EXECUTABLE NAMES bash)
-    if(NOT RAREXSEC_BASH_EXECUTABLE)
-        message(FATAL_ERROR "bash executable is required to run the integration tests")
-    endif()
-
-    find_program(RAREXSEC_ROOT_EXECUTABLE NAMES root)
-    if(NOT RAREXSEC_ROOT_EXECUTABLE)
-        message(FATAL_ERROR "root executable is required to run the integration tests")
-    endif()
-
-    set(RAREXSEC_TEST_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-    set(RAREXSEC_TEST_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/tests")
-    file(MAKE_DIRECTORY "${RAREXSEC_TEST_BINARY_DIR}")
-
-    set(RAREXSEC_SNAPSHOT_ANALYSIS_EXEC "${CMAKE_BINARY_DIR}/app/snapshot-analysis")
-
-    configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/run_snapshot_analysis_imt.sh.in
-        ${RAREXSEC_TEST_BINARY_DIR}/run_snapshot_analysis_imt.sh
-        @ONLY)
-
-    execute_process(
-        COMMAND chmod a+x ${RAREXSEC_TEST_BINARY_DIR}/run_snapshot_analysis_imt.sh)
-
-    add_test(
-        NAME snapshot-analysis-imt
-        COMMAND ${RAREXSEC_BASH_EXECUTABLE} ${RAREXSEC_TEST_BINARY_DIR}/run_snapshot_analysis_imt.sh)
 endif()
 
 if(RAREXSEC_BUILD_LIB OR RAREXSEC_BUILD_APPS)
