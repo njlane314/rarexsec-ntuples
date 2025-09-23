@@ -112,26 +112,30 @@ run tokens supplied as separate arguments are all valid.
 
 ## Hub snapshots
 
-Hubs (`*.hub.root`) are lightweight catalogues that describe every shard produced for a snapshot. The hub file stores the metadata while the shard payloads live in a sibling `shards/` directory. Each shard corresponds to a single sample/variation pair, carrying the requested columns for that dataset without further splitting.
+Hubs (`*.hub.root`) describe every materialised sample/variation pair and point to the corresponding friend metadata recorded during the snapshot step. The hub file keeps the catalogue and dictionaries, while lightweight ROOT files under a sibling `friends/` directory contain the per-event metadata required to drive downstream analyses.
 
 ### Catalogue contents
 
-- `shards` (TTree) – one row per shard with identifier fields (`sample_id`, `beam_id`, `period_id`, `variation_id`, `origin_id`), the relative shard location (`shard_path`), per-shard event counts, weight sums, exposure totals, and human-readable keys.
-- `hub_meta` (TTree) – key/value metadata entries. `provenance_dicts` preserves the dictionaries that map human-readable labels to the integer identifiers written into the shards, while `summary` stores the integrated POT and trigger totals for the complete hub.
+- `entries` (TTree) – one row per friend payload with identifiers (`entry_id`, `sample_id`, `beam_id`, `period_id`, `variation_id`, `origin_id`), human-readable keys (`sample_key`, `beam`, `period`, `variation`, `origin`, `stage`), the relative dataset path and tree name, friend file details (`friend_path`, `friend_tree`), and per-entry summaries such as the event span (`first_event_uid`/`last_event_uid`), total events, summed nominal weight, POT, and trigger counts.
+- `hub_meta` (TTree) – key/value metadata records. `provenance_dicts` serialises the dictionaries that translate labels to the integer identifiers stored in `entries`, while `summary` captures the integrated POT/trigger totals, the ntuple base directory, and the friend tree name.
 
-On disk the hub catalogue and shards appear as follows:
+### Friend metadata payloads
+
+Each catalogue lives alongside ROOT files that store the friend metadata produced for every sample/variation pair:
 
 ```text
 snapshot_fhc_r1-3_nuepre.hub.root
-├── shards/
-│   ├── nue_fhc_nominal_0000.root
-│   └── nue_fhc_fluxup_0000.root
-└── (hub catalog containing the shards and hub_meta TTrees)
+├── friends/
+│   ├── nue_fhc_nominal_friend.root
+│   └── nue_fhc_fluxup_friend.root
+└── (hub catalog containing the entries and hub_meta TTrees)
 ```
 
-### ROOT macro example
+Every friend file holds a single `meta` tree with a fixed schema: the unique event identifier (`event_uid`), the nominal analysis weight (`w_nom`), the baseline selection flag (`base_sel`), a Monte Carlo indicator (`is_mc`), and the encoded sample/variation identifier (`sampvar_uid`). The snapshot and training tools regenerate these files if they already exist so the catalogue and metadata stay in sync.
 
-Save the snippet below as `hub_example.C` and execute `root -l hub_example.C` to analyse events straight from the hub catalogue:
+### Downstream usage in the analysis framework
+
+Save the snippet below as `hub_example.C` and execute `root -l hub_example.C` to drive an `RDataFrame` analysis straight from the hub catalogue:
 
 ```cpp
 #include <rarexsec/HubDataFrame.h>
@@ -140,14 +144,14 @@ void hub_example() {
     proc::HubDataFrame hub{"snapshot_fhc_r1-3_nuepre.hub.root"};
     auto df = hub.query("numi-fhc", "run1", "nominal", "mc");
 
-    auto hist = df.Filter("base_sel")
+    auto hist = df.Filter("meta.base_sel")
                   .Histo1D({"h_vtx_z", "Reconstructed vertex z", 120, 0., 600.},
-                           "reco_neutrino_vertex_z");
+                           "reco_neutrino_vertex_z", "meta.w_nom");
     hist->Draw();
 }
 ```
 
-The `HubDataFrame` helper resolves the shard catalogue, builds the underlying `TChain`, and hands back an `RNode` that behaves exactly like the dataframe returned by the snapshot pipeline.
+`HubDataFrame` resolves the catalogue, rebuilds the `TChain` for the ntuple payloads, and attaches the `meta` friend trees. Friend branches such as `meta.base_sel` and `meta.w_nom` are immediately available to drive selection logic and event weighting in the same way as the in-pipeline processing chain.
 
 ## ROOT macro quickstart
 
