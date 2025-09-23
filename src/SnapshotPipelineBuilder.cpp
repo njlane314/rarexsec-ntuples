@@ -79,7 +79,7 @@ static ROOT::RDF::RNode configureFriendNode(ROOT::RDF::RNode df, bool is_mc, uin
     }
 
     auto define_bool_alias = [](ROOT::RDF::RNode node, const std::string &target, const std::string &source) {
-        return node.Define(target, [](const auto &value) { return static_cast<bool>(value); }, {source});
+        return node.Define(target, [](const bool value) { return value; }, {source});
     };
 
     if (df.HasColumn("passes_preselection")) {
@@ -93,7 +93,7 @@ static ROOT::RDF::RNode configureFriendNode(ROOT::RDF::RNode df, bool is_mc, uin
     }
 
     auto define_weight = [](ROOT::RDF::RNode node, const std::string &source) {
-        return node.Define("w_nom", [](const auto &value) { return static_cast<double>(value); }, {source});
+        return node.Define("w_nom", [](const double value) { return value; }, {source});
     };
 
     if (df.HasColumn("nominal_event_weight")) {
@@ -363,9 +363,9 @@ void SnapshotPipelineBuilder::snapshotToHub(const std::string &hub_path,
             entry.friend_tree = friend_tree_name;
 
             entry.n_events = n_events;
-            entry.first_event_uid = min_uid->GetValue();
-            entry.last_event_uid = max_uid->GetValue();
-            entry.sum_weights = sum_weights->GetValue();
+            entry.first_event_uid = min_uid.GetValue();
+            entry.last_event_uid = max_uid.GetValue();
+            entry.sum_weights = sum_weights.GetValue();
             entry.pot = combo.pot;
             entry.triggers = combo.triggers;
             entry.sample_key = combo.sk;
