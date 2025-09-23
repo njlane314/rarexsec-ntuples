@@ -2,15 +2,68 @@
 
 #include "../include/rarexsec/HubDataFrame.h"
 
+#include "TInterpreter.h"
+#include "TSystem.h"
+
 #include "ROOT/RDataFrame.hxx"
 #include "ROOT/RDFHelpers.hxx"
 
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
+namespace {
+
+bool ensure_processing_library_available() {
+    static bool initialised = false;
+    static bool available = false;
+    if (initialised) {
+        return available;
+    }
+    initialised = true;
+
+    const char *candidates[] = {"librarexsec_processing", "librarexsec_processing.so",
+                                "librarexsec_processing.dylib"};
+    for (const auto *name : candidates) {
+        if (gSystem->Load(name) >= 0) {
+            available = true;
+            return true;
+        }
+    }
+
+    std::filesystem::path current_file = std::filesystem::absolute(__FILE__);
+    auto repo_root = current_file.parent_path().parent_path();
+    auto include_dir = repo_root / "include";
+    gInterpreter->AddIncludePath(include_dir.string().c_str());
+
+    std::ostringstream declaration;
+    declaration << "#undef HUB_DATAFRAME_H\n";
+    declaration << "#undef RAREXSEC_DETAIL_HUBDATAFRAMEIMPL_H\n";
+    declaration << "#define RAREXSEC_HEADER_ONLY 1\n";
+    declaration << "#include \"rarexsec/HubDataFrame.h\"\n";
+
+    if (gInterpreter->Declare(declaration.str().c_str()) == 0) {
+        available = true;
+        return true;
+    }
+
+    std::cerr << "[rarexsec] Unable to load librexsec_processing and failed to compile the"
+              << " inline fallback. Build the project (e.g. 'make build-lib') or set"
+              << " RAREXSEC_PROCESSING_LIBRARY to the compiled library path.\n";
+    available = false;
+    return false;
+}
+
+} // namespace
+
 void hub_preview() {
+    if (!ensure_processing_library_available()) {
+        return;
+    }
+
     const std::string hub_path = "snapshot_fhc_r1-3_nuepre.hub.root";
     const std::string beam = "numi-fhc";
     const std::string period = "run1";
