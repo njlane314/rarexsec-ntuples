@@ -20,7 +20,7 @@ class HubDataFrame {
         double total_pot = 0.0;
         long total_triggers = 0;
         std::string base_directory;
-        std::filesystem::path resolved_base_directory;
+        std::string resolved_base_directory;
         std::string friend_tree = "meta";
     };
 
@@ -152,13 +152,13 @@ class HubDataFrame {
     void loadCatalog();
 
     std::string hub_path_;
-    std::filesystem::path hub_directory_;
+    std::string hub_directory_;
     std::unique_ptr<TChain> current_chain_;
     std::unique_ptr<TChain> friend_chain_;
     Summary summary_;
     std::vector<CatalogEntry> entries_;
     ProvenanceDictionaries provenance_dicts_;
-    std::optional<std::filesystem::path> base_directory_override_;
+    std::optional<std::string> base_directory_override_;
 };
 
 } // namespace proc

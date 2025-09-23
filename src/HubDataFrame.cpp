@@ -131,7 +131,8 @@ ROOT::RDF::RNode HubDataFrame::Selection::load() {
 
 HubDataFrame::HubDataFrame(const std::string &hub_path)
     : hub_path_(hub_path),
-      hub_directory_(std::filesystem::absolute(std::filesystem::path(hub_path)).parent_path()) {
+      hub_directory_(
+          std::filesystem::absolute(std::filesystem::path(hub_path)).parent_path().string()) {
     this->loadMetadata();
     this->loadCatalog();
 }
@@ -269,9 +270,10 @@ std::filesystem::path HubDataFrame::resolveDatasetPath(const CatalogEntry &entry
     if (dataset_path.is_absolute()) {
         if (base_directory_override_ && !summary_.resolved_base_directory.empty()) {
             std::error_code ec;
-            auto relative = std::filesystem::relative(dataset_path, summary_.resolved_base_directory, ec);
+            auto relative = std::filesystem::relative(
+                dataset_path, std::filesystem::path(summary_.resolved_base_directory), ec);
             if (!ec) {
-                return *base_directory_override_ / relative;
+                return std::filesystem::path(*base_directory_override_) / relative;
             }
             log::info("HubDataFrame", "[warning]", "Unable to rebase dataset path", dataset_path.string(),
                       "using override base directory");
@@ -280,14 +282,14 @@ std::filesystem::path HubDataFrame::resolveDatasetPath(const CatalogEntry &entry
     }
 
     if (base_directory_override_) {
-        return *base_directory_override_ / dataset_path;
+        return std::filesystem::path(*base_directory_override_) / dataset_path;
     }
 
     if (!summary_.resolved_base_directory.empty()) {
-        return summary_.resolved_base_directory / dataset_path;
+        return std::filesystem::path(summary_.resolved_base_directory) / dataset_path;
     }
 
-    return hub_directory_ / dataset_path;
+    return std::filesystem::path(hub_directory_) / dataset_path;
 }
 
 std::filesystem::path HubDataFrame::resolveFriendPath(const CatalogEntry &entry) const {
@@ -298,7 +300,7 @@ std::filesystem::path HubDataFrame::resolveFriendPath(const CatalogEntry &entry)
     if (friend_path.is_absolute()) {
         return friend_path;
     }
-    return hub_directory_ / friend_path;
+    return std::filesystem::path(hub_directory_) / friend_path;
 }
 
 void HubDataFrame::setBaseDirectoryOverride(const std::filesystem::path &path) {
@@ -306,19 +308,20 @@ void HubDataFrame::setBaseDirectoryOverride(const std::filesystem::path &path) {
         base_directory_override_.reset();
         return;
     }
-    base_directory_override_ = path.is_absolute() ? path : std::filesystem::absolute(path);
+    const auto absolute_path = path.is_absolute() ? path : std::filesystem::absolute(path);
+    base_directory_override_ = absolute_path.string();
 }
 
 void HubDataFrame::clearBaseDirectoryOverride() { base_directory_override_.reset(); }
 
 std::filesystem::path HubDataFrame::resolvedBaseDirectory() const {
     if (base_directory_override_) {
-        return *base_directory_override_;
+        return std::filesystem::path(*base_directory_override_);
     }
     if (!summary_.resolved_base_directory.empty()) {
-        return summary_.resolved_base_directory;
+        return std::filesystem::path(summary_.resolved_base_directory);
     }
-    return hub_directory_;
+    return std::filesystem::path(hub_directory_);
 }
 
 void HubDataFrame::loadMetadata() {
@@ -370,9 +373,10 @@ void HubDataFrame::loadMetadata() {
     if (!summary_.base_directory.empty()) {
         std::filesystem::path base_dir(summary_.base_directory);
         if (base_dir.is_relative()) {
-            summary_.resolved_base_directory = std::filesystem::absolute(hub_directory_ / base_dir);
+            summary_.resolved_base_directory =
+                std::filesystem::absolute(std::filesystem::path(hub_directory_) / base_dir).string();
         } else {
-            summary_.resolved_base_directory = base_dir;
+            summary_.resolved_base_directory = base_dir.string();
         }
     } else {
         summary_.resolved_base_directory.clear();
