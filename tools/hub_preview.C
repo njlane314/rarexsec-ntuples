@@ -17,6 +17,38 @@
 
 namespace {
 
+void add_relative_library_paths(const std::filesystem::path &repo_root) {
+    if (repo_root.empty()) {
+        return;
+    }
+
+    const std::vector<std::string> relative_dirs = {
+        ".",
+        "build",
+        "build/src",
+        "build/lib",
+        "build-apps",
+        "build-apps/src",
+        "build-apps/lib",
+        "build-lib",
+        "build-lib/src",
+        "build-lib/lib",
+        "install/lib"
+    };
+
+    for (const auto &dir : relative_dirs) {
+        const std::filesystem::path candidate = repo_root / dir;
+        const std::string path = candidate.string();
+        if (path.empty()) {
+            continue;
+        }
+
+        if (!gSystem->AccessPathName(path.c_str(), kFileExists)) {
+            gSystem->AddDynamicPath(path.c_str());
+        }
+    }
+}
+
 bool ensure_processing_library_available() {
     static bool initialised = false;
     static bool available = false;
@@ -34,8 +66,24 @@ bool ensure_processing_library_available() {
         }
     }
 
+    if (const char *override_path = gSystem->Getenv("RAREXSEC_PROCESSING_LIBRARY")) {
+        if (gSystem->Load(override_path) >= 0) {
+            available = true;
+            return true;
+        }
+    }
+
     std::filesystem::path current_file = std::filesystem::absolute(__FILE__);
     auto repo_root = current_file.parent_path().parent_path();
+    add_relative_library_paths(repo_root);
+
+    for (const auto *name : candidates) {
+        if (gSystem->Load(name) >= 0) {
+            available = true;
+            return true;
+        }
+    }
+
     auto include_dir = repo_root / "include";
     gInterpreter->AddIncludePath(include_dir.string().c_str());
 
@@ -50,9 +98,11 @@ bool ensure_processing_library_available() {
         return true;
     }
 
-    std::cerr << "[rarexsec] Unable to load librexsec_processing and failed to compile the"
-              << " inline fallback. Build the project (e.g. 'make build-lib') or set"
-              << " RAREXSEC_PROCESSING_LIBRARY to the compiled library path.\n";
+    std::cerr << "[rarexsec] Unable to load librexsec_processing using the standard names, "
+              << "the RAREXSEC_PROCESSING_LIBRARY override, or repository build directories, "
+              << "and compiling the inline fallback failed. Build the project (e.g. 'make "
+              << "build-lib') or set RAREXSEC_PROCESSING_LIBRARY to the compiled library "
+              << "path.\n";
     available = false;
     return false;
 }
