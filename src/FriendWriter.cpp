@@ -26,7 +26,6 @@ std::filesystem::path FriendWriter::writeFriend(ROOT::RDF::RNode df,
     opt.fCompressionAlgorithm = config_.compression_algo;
     opt.fCompressionLevel = config_.compression_level;
     opt.fAutoFlush = -30 * 1024 * 1024;
-    opt.fBufferSize = 256 * 1024;
     opt.fSplitLevel = 0;
     opt.fOverwriteIfExists = true;
 
