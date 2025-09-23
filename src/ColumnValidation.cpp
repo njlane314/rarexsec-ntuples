@@ -22,7 +22,7 @@ std::string joinColumnNames(const std::vector<std::string> &columns) {
 
 } // namespace
 
-std::vector<std::string> collectMissingColumns(const ROOT::RDF::RNode &df,
+std::vector<std::string> collectMissingColumns(ROOT::RDF::RNode &df,
                                                const std::vector<std::string> &columns) {
     std::vector<std::string> missing;
     missing.reserve(columns.size());
