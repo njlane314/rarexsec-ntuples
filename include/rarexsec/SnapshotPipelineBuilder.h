@@ -88,6 +88,12 @@ class SnapshotPipelineBuilder {
         bool is_nominal;
     };
 
+    struct SnapshotPlan {
+        ProvenanceDicts dicts;
+        std::vector<ROOT::RDF::RNode> nodes;
+        std::vector<Combo> combos;
+    };
+
     void loadAll();
     void processRunConfig(const RunConfig &rc);
 
@@ -95,6 +101,9 @@ class SnapshotPipelineBuilder {
                        const std::vector<std::string> &friend_columns,
                        std::vector<ROOT::RDF::RNode> &nodes, const std::vector<Combo> &combos,
                        const ProvenanceDicts &dicts) const;
+
+    void logSampleSummary() const;
+    SnapshotPlan buildSnapshotPlan() const;
 
     /**
      * Collect metadata entries for a single dataframe node and write its friend tree.

@@ -271,58 +271,81 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     log::info("SnapshotPipelineBuilder::snapshot", "Preparing hub snapshot", output_file);
     log::info("SnapshotPipelineBuilder::snapshot", "Processing", frames_.size(), "samples");
 
-    if (!frames_.empty()) {
-        std::unordered_map<std::string, std::size_t> origin_counts;
-        std::unordered_map<std::string, std::size_t> stage_counts;
-        std::unordered_map<std::string, std::size_t> run_config_counts;
-        origin_counts.reserve(frames_.size());
-        stage_counts.reserve(frames_.size());
-        run_config_counts.reserve(frames_.size());
+    this->logSampleSummary();
 
-        for (const auto &[sample_key, sample] : frames_) {
-            ++origin_counts[proc::originToString(sample.sampleOrigin())];
+    const auto friend_column_candidates = requestedFriendColumns();
+    auto plan = this->buildSnapshotPlan();
 
-            const auto &stage_label = sample.stageName();
-            ++stage_counts[stage_label];
-
-            std::string run_label{"<unmapped>"};
-            if (const auto *rc = this->getRunConfigForSample(sample_key)) {
-                run_label = rc->label();
-            }
-            ++run_config_counts[run_label];
-        }
-
-        auto log_count_map = [](std::string_view heading,
-                                 const std::unordered_map<std::string, std::size_t> &counts) {
-            if (counts.empty()) {
-                return;
-            }
-            std::vector<std::pair<std::string, std::size_t>> sorted_entries;
-            sorted_entries.reserve(counts.size());
-            for (const auto &entry : counts) {
-                sorted_entries.emplace_back(entry.first, entry.second);
-            }
-            std::sort(sorted_entries.begin(), sorted_entries.end(),
-                      [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
-
-            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", heading);
-            for (const auto &[label, count] : sorted_entries) {
-                const char *sample_word = (count == 1) ? "sample" : "samples";
-                std::ostringstream entry_message;
-                entry_message << "  - " << label << " (" << count << ' ' << sample_word << ')';
-                log::info("SnapshotPipelineBuilder::snapshot", "[debug]", entry_message.str());
-            }
-        };
-
-        log_count_map("Sample distribution by origin:", origin_counts);
-        log_count_map("Sample distribution by stage:", stage_counts);
-        log_count_map("Sample distribution by run configuration:", run_config_counts);
-    } else {
-        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", "No samples have been queued for processing.");
+    if (plan.nodes.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "No nodes to process.");
+        return;
     }
 
-    // Build provenance dictionaries
-    ProvenanceDicts dicts;
+    log::info("SnapshotPipelineBuilder::snapshot", "Prepared", plan.combos.size(),
+              "friend dataframe nodes for snapshot");
+
+    auto friend_columns = selectAvailableFriendColumns(plan.nodes, friend_column_candidates);
+    snapshotToHub(output_file, friend_columns, plan.nodes, plan.combos, plan.dicts);
+}
+
+void SnapshotPipelineBuilder::logSampleSummary() const {
+    if (frames_.empty()) {
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]",
+                  "No samples have been queued for processing.");
+        return;
+    }
+
+    std::unordered_map<std::string, std::size_t> origin_counts;
+    std::unordered_map<std::string, std::size_t> stage_counts;
+    std::unordered_map<std::string, std::size_t> run_config_counts;
+    origin_counts.reserve(frames_.size());
+    stage_counts.reserve(frames_.size());
+    run_config_counts.reserve(frames_.size());
+
+    for (const auto &[sample_key, sample] : frames_) {
+        ++origin_counts[proc::originToString(sample.sampleOrigin())];
+
+        const auto &stage_label = sample.stageName();
+        ++stage_counts[stage_label];
+
+        std::string run_label{"<unmapped>"};
+        if (const auto *rc = this->getRunConfigForSample(sample_key)) {
+            run_label = rc->label();
+        }
+        ++run_config_counts[run_label];
+    }
+
+    auto log_count_map = [](std::string_view heading, const std::unordered_map<std::string, std::size_t> &counts) {
+        if (counts.empty()) {
+            return;
+        }
+
+        std::vector<std::pair<std::string, std::size_t>> sorted_entries;
+        sorted_entries.reserve(counts.size());
+        for (const auto &entry : counts) {
+            sorted_entries.emplace_back(entry.first, entry.second);
+        }
+        std::sort(sorted_entries.begin(), sorted_entries.end(),
+                  [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
+
+        log::info("SnapshotPipelineBuilder::snapshot", "[debug]", heading);
+        for (const auto &[label, count] : sorted_entries) {
+            const char *sample_word = (count == 1) ? "sample" : "samples";
+            std::ostringstream entry_message;
+            entry_message << "  - " << label << " (" << count << ' ' << sample_word << ')';
+            log::info("SnapshotPipelineBuilder::snapshot", "[debug]", entry_message.str());
+        }
+    };
+
+    log_count_map("Sample distribution by origin:", origin_counts);
+    log_count_map("Sample distribution by stage:", stage_counts);
+    log_count_map("Sample distribution by run configuration:", run_config_counts);
+}
+
+SnapshotPipelineBuilder::SnapshotPlan SnapshotPipelineBuilder::buildSnapshotPlan() const {
+    SnapshotPlan plan;
+    auto &dicts = plan.dicts;
+
     dicts.origin2id[SampleOrigin::kData] =
         intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kData);
     dicts.origin2id[SampleOrigin::kMonteCarlo] =
@@ -332,13 +355,8 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
     dicts.origin2id[SampleOrigin::kExternal] =
         intern<decltype(dicts.origin2id), SampleOrigin, uint8_t>(dicts.origin2id, SampleOrigin::kExternal);
 
-    // Build nodes
-    std::vector<ROOT::RDF::RNode> nodes;
-    nodes.reserve(frames_.size() * 2);
-    std::vector<Combo> combos;
-    combos.reserve(frames_.size() * 4);
-
-    const auto friend_column_candidates = requestedFriendColumns();
+    plan.nodes.reserve(frames_.size() * 2);
+    plan.combos.reserve(frames_.size() * 4);
 
     for (const auto &[key, sample] : frames_) {
         const auto *rc = this->getRunConfigForSample(key);
@@ -358,19 +376,39 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
         const uint16_t vnom = intern<decltype(dicts.var2id), std::string, uint16_t>(dicts.var2id, "nominal");
         const uint8_t oid = dicts.origin2id.at(origin);
         const bool is_mc = (origin == SampleOrigin::kMonteCarlo);
+        const std::string origin_label = originToString(origin);
 
-        // nominal
-        {
-            auto df = sample.nominalNode();
-            df = configureFriendNode(df, is_mc, (static_cast<uint64_t>(sid) << 16) | vnom);
-            nodes.emplace_back(df);
+        auto append_node = [&](ROOT::RDF::RNode node, uint16_t var_id, uint16_t beam_id, uint16_t period_id,
+                               uint16_t stage_id, const std::string &variation_label,
+                               const std::string &beam_label, const std::string &period_label,
+                               const std::string &stage_label, const std::string &dataset_path, double pot,
+                               long triggers, bool is_nominal) {
+            const uint64_t sampvar_uid = (static_cast<uint64_t>(sid) << 16) | var_id;
+            node = configureFriendNode(node, is_mc, sampvar_uid);
+            plan.nodes.emplace_back(node);
+            plan.combos.push_back(Combo{sid,
+                                        var_id,
+                                        beam_id,
+                                        period_id,
+                                        stage_id,
+                                        oid,
+                                        origin,
+                                        key.str(),
+                                        variation_label,
+                                        beam_label,
+                                        period_label,
+                                        stage_label,
+                                        origin_label,
+                                        dataset_path,
+                                        kInputTreeName,
+                                        pot,
+                                        triggers,
+                                        is_nominal});
+        };
 
-            combos.push_back(Combo{sid, vnom, bid, pid, stg, oid, origin, key.str(), "nominal", beam, period, stage,
-                                   originToString(origin), sample.relativePath(), kInputTreeName, sample.pot(),
-                                   sample.triggers(), true});
-        }
+        append_node(sample.nominalNode(), vnom, bid, pid, stg, "nominal", beam, period, stage,
+                    sample.relativePath(), sample.pot(), sample.triggers(), true);
 
-        // variations
         for (const auto &vd : sample.variationDescriptors()) {
             auto it = sample.variationNodes().find(vd.variation);
             if (it == sample.variationNodes().end()) {
@@ -391,26 +429,12 @@ void SnapshotPipelineBuilder::snapshot(const std::string &filter_expr, const std
             log::info("SnapshotPipelineBuilder::snapshot", "Configuring variation", variation_label, "for sample",
                       key.str(), "stage", vstage);
 
-            auto vdf = it->second;
-            vdf = configureFriendNode(vdf, is_mc, (static_cast<uint64_t>(sid) << 16) | vvid);
-            nodes.emplace_back(vdf);
-
-            combos.push_back(Combo{sid, vvid, vbid, vpid, vstg, oid, origin, key.str(), variation_label, vbeam,
-                                   vperiod, vstage, originToString(origin), vd.relative_path, kInputTreeName, vd.pot,
-                                   vd.triggers, false});
+            append_node(it->second, vvid, vbid, vpid, vstg, variation_label, vbeam, vperiod, vstage,
+                        vd.relative_path, vd.pot, vd.triggers, false);
         }
     }
 
-    if (nodes.empty()) {
-        log::info("SnapshotPipelineBuilder::snapshot", "[warning]", "No nodes to process.");
-        return;
-    }
-
-    log::info("SnapshotPipelineBuilder::snapshot", "Prepared", combos.size(),
-              "friend dataframe nodes for snapshot");
-
-    auto friend_columns = selectAvailableFriendColumns(nodes, friend_column_candidates);
-    snapshotToHub(output_file, friend_columns, nodes, combos, dicts);
+    return plan;
 }
 
 void SnapshotPipelineBuilder::snapshot(const FilterExpression &query, const std::string &output_file,
