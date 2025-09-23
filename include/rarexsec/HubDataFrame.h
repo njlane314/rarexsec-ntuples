@@ -179,7 +179,7 @@ class HubDataFrame {
         std::string alias;
         std::string key;
     };
-    std::vector<FriendChain> friend_chains_;
+    std::vector<FriendChain> friend_chains_; //! transient helper chains, not part of the ROOT dictionary
     Summary summary_;
     std::vector<CatalogEntry> entries_;
     ProvenanceDictionaries provenance_dicts_;
