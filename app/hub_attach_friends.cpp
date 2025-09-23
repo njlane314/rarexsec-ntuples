@@ -10,6 +10,7 @@
 #include "TTreeReader.h"
 #include "TTreeReaderValue.h"
 #include "Rtypes.h"
+#include <RVersion.h>
 
 #include <algorithm>
 #include <cctype>
@@ -20,6 +21,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_map>
 #include <unordered_set>
@@ -160,11 +162,76 @@ Options parseOptions(int argc, char **argv) {
     return opts;
 }
 
+EDataType getLeafType(const TLeaf *leaf) {
+    if (!leaf) {
+        return kNoType_t;
+    }
+
+#if defined(ROOT_VERSION_CODE) && ROOT_VERSION_CODE >= ROOT_VERSION(6, 30, 0)
+    return leaf->GetType();
+#else
+    const char *type_name = leaf->GetTypeName();
+    if (!type_name) {
+        return kNoType_t;
+    }
+
+    const std::string_view type_view{type_name};
+    if (type_view == "Float_t") {
+        return kFloat_t;
+    }
+#if defined(kFloat16_t) || defined(kFloat16Alt_t)
+    if (type_view == "Float16_t") {
+#if defined(kFloat16_t)
+        return kFloat16_t;
+#else
+        return kFloat16Alt_t;
+#endif
+    }
+#endif
+    if (type_view == "Double_t") {
+        return kDouble_t;
+    }
+    if (type_view == "Double32_t") {
+        return kDouble32_t;
+    }
+    if (type_view == "Int_t") {
+        return kInt_t;
+    }
+    if (type_view == "UInt_t") {
+        return kUInt_t;
+    }
+    if (type_view == "Long64_t") {
+        return kLong64_t;
+    }
+    if (type_view == "ULong64_t") {
+        return kULong64_t;
+    }
+    if (type_view == "Short_t") {
+        return kShort_t;
+    }
+    if (type_view == "UShort_t") {
+        return kUShort_t;
+    }
+    if (type_view == "Char_t") {
+        return kChar_t;
+    }
+    if (type_view == "UChar_t") {
+        return kUChar_t;
+    }
+    if (type_view == "Bool_t") {
+        return kBool_t;
+    }
+    return kNoType_t;
+#endif
+}
+
 bool isSupportedLeaf(EDataType type) {
     switch (type) {
     case kFloat_t:
     case kFloat16_t:
+#ifdef kFloat16Alt_t
     case kFloat16Alt_t:
+#endif
     case kDouble_t:
     case kDouble32_t:
     case kInt_t:
@@ -186,7 +253,9 @@ ColumnSpec::ValueType inferValueType(EDataType type) {
     switch (type) {
     case kFloat_t:
     case kFloat16_t:
+#ifdef kFloat16Alt_t
     case kFloat16Alt_t:
+#endif
         return ColumnSpec::ValueType::Float;
     default:
         return ColumnSpec::ValueType::Double;
@@ -220,7 +289,8 @@ std::vector<ColumnSpec> buildColumnSpecs(TTree *tree, const std::vector<ColumnOv
         if (leaf->GetLen() > 1 || leaf->GetLeafCount() != nullptr) {
             throw std::runtime_error("Score column '" + input + "' is not a flat scalar branch");
         }
-        if (!isSupportedLeaf(leaf->GetType())) {
+        const auto type = getLeafType(leaf);
+        if (!isSupportedLeaf(type)) {
             throw std::runtime_error("Score column '" + input + "' uses an unsupported data type");
         }
             if (!seen_outputs.insert(output).second) {
@@ -229,8 +299,8 @@ std::vector<ColumnSpec> buildColumnSpecs(TTree *tree, const std::vector<ColumnOv
             ColumnSpec spec;
             spec.input_name = input;
             spec.output_name = output;
-            spec.leaf_type = leaf->GetType();
-            spec.value_type = inferValueType(leaf->GetType());
+            spec.leaf_type = type;
+            spec.value_type = inferValueType(type);
             specs.push_back(std::move(spec));
         }
         return specs;
@@ -251,7 +321,8 @@ std::vector<ColumnSpec> buildColumnSpecs(TTree *tree, const std::vector<ColumnOv
         if (!leaf) {
             continue;
         }
-        if (!isSupportedLeaf(leaf->GetType())) {
+        const auto type = getLeafType(leaf);
+        if (!isSupportedLeaf(type)) {
             continue;
         }
         if (leaf->GetLen() > 1 || leaf->GetLeafCount() != nullptr) {
@@ -263,8 +334,8 @@ std::vector<ColumnSpec> buildColumnSpecs(TTree *tree, const std::vector<ColumnOv
         ColumnSpec spec;
         spec.input_name = name;
         spec.output_name = name;
-        spec.leaf_type = leaf->GetType();
-        spec.value_type = inferValueType(leaf->GetType());
+        spec.leaf_type = type;
+        spec.value_type = inferValueType(type);
         specs.push_back(std::move(spec));
     }
 
@@ -273,13 +344,13 @@ std::vector<ColumnSpec> buildColumnSpecs(TTree *tree, const std::vector<ColumnOv
 
 struct EventReaderBase {
     virtual ~EventReaderBase() = default;
-    virtual ULong64_t value() const = 0;
+    virtual ULong64_t value() = 0;
 };
 
 template <typename T>
 struct EventReader : EventReaderBase {
     explicit EventReader(TTreeReader &reader) : value_reader(reader, "event_uid") {}
-    ULong64_t value() const override { return static_cast<ULong64_t>(*value_reader); }
+    ULong64_t value() override { return static_cast<ULong64_t>(*value_reader); }
     TTreeReaderValue<T> value_reader;
 };
 
@@ -300,13 +371,13 @@ std::unique_ptr<EventReaderBase> buildEventReader(TTreeReader &reader, EDataType
 
 struct ColumnReaderBase {
     virtual ~ColumnReaderBase() = default;
-    virtual double value() const = 0;
+    virtual double value() = 0;
 };
 
 template <typename T>
 struct ColumnReader : ColumnReaderBase {
     ColumnReader(TTreeReader &reader, const std::string &column) : value_reader(reader, column.c_str()) {}
-    double value() const override { return static_cast<double>(*value_reader); }
+    double value() override { return static_cast<double>(*value_reader); }
     TTreeReaderValue<T> value_reader;
 };
 
@@ -314,7 +385,9 @@ std::unique_ptr<ColumnReaderBase> buildColumnReader(TTreeReader &reader, const C
     switch (spec.leaf_type) {
     case kFloat_t:
     case kFloat16_t:
+#ifdef kFloat16Alt_t
     case kFloat16Alt_t:
+#endif
         return std::make_unique<ColumnReader<Float_t>>(reader, spec.input_name);
     case kDouble_t:
     case kDouble32_t:
@@ -365,7 +438,7 @@ ScoreTable loadScoreTable(const std::string &file_path, const std::string &tree_
     }
 
     TTreeReader reader(tree);
-    auto event_reader = buildEventReader(reader, uid_leaf->GetType());
+    auto event_reader = buildEventReader(reader, getLeafType(uid_leaf));
 
     std::vector<std::unique_ptr<ColumnReaderBase>> column_readers;
     column_readers.reserve(column_specs.size());
