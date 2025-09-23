@@ -12,13 +12,18 @@
 
 namespace proc {
 
+inline constexpr const char *kDefaultStageLabel = "<none>";
+
 struct VariationDescriptor {
     SampleKey sample_key;
     SampleVariation variation{SampleVariation::kUnknown};
 
     std::string variation_label;
+    std::string canonical_label;
     std::string relative_path;
     std::string stage_name;
+    std::string truth_filter;
+    std::vector<std::string> truth_exclusions;
 
     double pot{0.0};
     long triggers{0};
@@ -51,6 +56,9 @@ inline SampleDescriptor SampleDescriptor::fromJson(const nlohmann::json &sample_
 
     descriptor.relative_path = sample_json.value("relative_path", std::string{});
     descriptor.stage_name = sample_json.value("stage_name", std::string{});
+    if (descriptor.stage_name.empty()) {
+        descriptor.stage_name = kDefaultStageLabel;
+    }
     descriptor.truth_filter = sample_json.value("truth_filter", std::string{});
     descriptor.truth_exclusions = sample_json.value("exclusion_truth_filters", std::vector<std::string>{});
     descriptor.pot = sample_json.value("pot", 0.0);
@@ -64,8 +72,26 @@ inline SampleDescriptor SampleDescriptor::fromJson(const nlohmann::json &sample_
             variation.sample_key = SampleKey{dv.at("sample_key").get<std::string>()};
             variation.variation_label = dv.value("variation_type", std::string{});
             variation.variation = variationFromString(variation.variation_label);
+            variation.canonical_label = variationToKey(variation.variation);
+            if (variation.variation_label.empty()) {
+                variation.variation_label = variation.canonical_label;
+            }
             variation.relative_path = dv.value("relative_path", std::string{});
             variation.stage_name = dv.value("stage_name", std::string{});
+            if (variation.stage_name.empty()) {
+                variation.stage_name = descriptor.stage_name;
+            }
+            if (dv.contains("truth_filter") && dv.at("truth_filter").is_string()) {
+                variation.truth_filter = dv.at("truth_filter").get<std::string>();
+            } else {
+                variation.truth_filter = descriptor.truth_filter;
+            }
+            if (dv.contains("exclusion_truth_filters") && dv.at("exclusion_truth_filters").is_array()) {
+                variation.truth_exclusions =
+                    dv.at("exclusion_truth_filters").get<std::vector<std::string>>();
+            } else {
+                variation.truth_exclusions = descriptor.truth_exclusions;
+            }
             variation.pot = dv.value("pot", 0.0);
             variation.triggers = dv.value("triggers", 0L);
             descriptor.variations.emplace_back(std::move(variation));
