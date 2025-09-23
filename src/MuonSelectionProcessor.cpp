@@ -56,7 +56,7 @@ ROOT::RVec<float> computeMaskedCosTheta(const ROOT::RVec<float> &theta, const RO
 
 } // namespace
 
-ROOT::RDF::RNode MuonSelectionProcessor::process(ROOT::RDF::RNode df, SampleOrigin st) const {
+ROOT::RDF::RNode MuonSelectionProcessor::process(ROOT::RDF::RNode df, [[maybe_unused]] SampleOrigin st) const {
     auto processed = extractMuonFeatures(buildMuonMask(std::move(df)));
     return processed;
 }
