@@ -9,6 +9,7 @@
 #include "ROOT/RDFHelpers.hxx"
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -57,32 +58,76 @@ bool ensure_processing_library_available() {
     return false;
 }
 
+struct PreviewDefaults {
+    static constexpr const char *hub_path = "snapshot_fhc_r1-3_nuepre.hub.root";
+    static constexpr const char *beam = "numi-fhc";
+    static constexpr const char *period = "run1";
+    static constexpr const char *variation = "nominal";
+    static constexpr const char *origin = "";
+    static constexpr const char *stage = "";
+};
+
+std::string resolve_argument(const char *value, const char *default_value) {
+    if (value != nullptr && value != default_value) {
+        return value;
+    }
+    return default_value != nullptr ? default_value : "";
+}
+
+std::string resolve_hub_path(const char *value) {
+    const bool provided = value != nullptr && value != PreviewDefaults::hub_path && value[0] != '\0';
+    if (provided) {
+        return value;
+    }
+    if (const char *env = std::getenv("HUB_PREVIEW_HUB")) {
+        if (env[0] != '\0') {
+            return env;
+        }
+    }
+    if (value != nullptr && value[0] != '\0') {
+        return value;
+    }
+    return PreviewDefaults::hub_path;
+}
+
 } // namespace
 
-void hub_preview() {
+void hub_preview(const char *hub_path = PreviewDefaults::hub_path,
+                 const char *beam = PreviewDefaults::beam,
+                 const char *period = PreviewDefaults::period,
+                 const char *variation = PreviewDefaults::variation,
+                 const char *origin = PreviewDefaults::origin,
+                 const char *stage = PreviewDefaults::stage) {
     if (!ensure_processing_library_available()) {
         return;
     }
 
-    const std::string hub_path = "snapshot_fhc_r1-3_nuepre.hub.root";
-    const std::string beam = "numi-fhc";
-    const std::string period = "run1";
-    const std::string variation = "nominal";
-    const std::string origin = ""; // leave empty to accept any origin (mc, data, etc.)
-    const std::string stage = "";  // leave empty to accept any processing stage
+    const std::string hub_path_value = resolve_hub_path(hub_path);
+    const std::string beam_value = resolve_argument(beam, PreviewDefaults::beam);
+    const std::string period_value = resolve_argument(period, PreviewDefaults::period);
+    const std::string variation_value = resolve_argument(variation, PreviewDefaults::variation);
+    const std::string origin_value = resolve_argument(origin, PreviewDefaults::origin);
+    const std::string stage_value = resolve_argument(stage, PreviewDefaults::stage);
 
-    proc::HubDataFrame hub{hub_path};
+    if (!std::filesystem::exists(hub_path_value)) {
+        std::cerr << "[rarexsec] Hub file '" << hub_path_value
+                  << "' was not found. Provide a valid path or set HUB_PREVIEW_HUB.\n";
+        return;
+    }
+
+    proc::HubDataFrame hub{hub_path_value};
 
     try {
-        auto df = hub.query(beam, period, variation, origin, stage);
+        auto df = hub.query(beam_value, period_value, variation_value, origin_value, stage_value);
 
-        std::cout << "Opened hub: " << hub_path << '\n';
-        std::cout << "Beam: " << beam << ", period: " << period << ", variation: " << variation;
-        if (!origin.empty()) {
-            std::cout << ", origin: " << origin;
+        std::cout << "Opened hub: " << hub_path_value << '\n';
+        std::cout << "Beam: " << beam_value << ", period: " << period_value
+                  << ", variation: " << variation_value;
+        if (!origin_value.empty()) {
+            std::cout << ", origin: " << origin_value;
         }
-        if (!stage.empty()) {
-            std::cout << ", stage: " << stage;
+        if (!stage_value.empty()) {
+            std::cout << ", stage: " << stage_value;
         }
         std::cout << "\n\n";
 
