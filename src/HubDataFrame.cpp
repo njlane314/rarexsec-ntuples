@@ -61,62 +61,62 @@ std::optional<std::string> normaliseSelectorValue(const std::string &value) {
 }
 } // namespace
 
-Selection &HubDataFrame::Selection::sample(const std::string &value) {
+HubDataFrame::Selection &HubDataFrame::Selection::sample(const std::string &value) {
     sample_ = normaliseSelectorValue(value);
     return *this;
 }
 
-Selection &HubDataFrame::Selection::beam(const std::string &value) {
+HubDataFrame::Selection &HubDataFrame::Selection::beam(const std::string &value) {
     beam_ = normaliseSelectorValue(value);
     return *this;
 }
 
-Selection &HubDataFrame::Selection::period(const std::string &value) {
+HubDataFrame::Selection &HubDataFrame::Selection::period(const std::string &value) {
     period_ = normaliseSelectorValue(value);
     return *this;
 }
 
-Selection &HubDataFrame::Selection::variation(const std::string &value) {
+HubDataFrame::Selection &HubDataFrame::Selection::variation(const std::string &value) {
     variation_ = normaliseSelectorValue(value);
     return *this;
 }
 
-Selection &HubDataFrame::Selection::origin(const std::string &value) {
+HubDataFrame::Selection &HubDataFrame::Selection::origin(const std::string &value) {
     origin_ = normaliseSelectorValue(value);
     return *this;
 }
 
-Selection &HubDataFrame::Selection::stage(const std::string &value) {
+HubDataFrame::Selection &HubDataFrame::Selection::stage(const std::string &value) {
     stage_ = normaliseSelectorValue(value);
     return *this;
 }
 
-Selection &HubDataFrame::Selection::clearSample() {
+HubDataFrame::Selection &HubDataFrame::Selection::clearSample() {
     sample_.reset();
     return *this;
 }
 
-Selection &HubDataFrame::Selection::clearBeam() {
+HubDataFrame::Selection &HubDataFrame::Selection::clearBeam() {
     beam_.reset();
     return *this;
 }
 
-Selection &HubDataFrame::Selection::clearPeriod() {
+HubDataFrame::Selection &HubDataFrame::Selection::clearPeriod() {
     period_.reset();
     return *this;
 }
 
-Selection &HubDataFrame::Selection::clearVariation() {
+HubDataFrame::Selection &HubDataFrame::Selection::clearVariation() {
     variation_.reset();
     return *this;
 }
 
-Selection &HubDataFrame::Selection::clearOrigin() {
+HubDataFrame::Selection &HubDataFrame::Selection::clearOrigin() {
     origin_.reset();
     return *this;
 }
 
-Selection &HubDataFrame::Selection::clearStage() {
+HubDataFrame::Selection &HubDataFrame::Selection::clearStage() {
     stage_.reset();
     return *this;
 }
