@@ -20,6 +20,40 @@ namespace {
 
 constexpr unsigned int kPreviewRowLimit = 5;
 
+bool try_load_library(const std::string &candidate) {
+    return !candidate.empty() && gSystem->Load(candidate.c_str()) >= 0;
+}
+
+template <typename Candidates>
+bool try_load_candidates(const Candidates &candidates) {
+    for (const auto &name : candidates) {
+        if (try_load_library(name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void add_repository_relative_library_paths(const std::filesystem::path &repo_root) {
+    if (repo_root.empty()) {
+        return;
+    }
+
+    const std::vector<std::string> relative_dirs = {".",         "build",         "build/src",
+                                                    "build/lib", "build-apps",   "build-apps/src",
+                                                    "build-apps/lib",           "build-lib",
+                                                    "build-lib/src",            "build-lib/lib",
+                                                    "install/lib"};
+
+    for (const auto &dir : relative_dirs) {
+        auto path = repo_root / dir;
+        const std::string path_str = path.string();
+        if (!path_str.empty() && !gSystem->AccessPathName(path_str.c_str(), kFileExists)) {
+            gSystem->AddDynamicPath(path_str.c_str());
+        }
+    }
+}
+
 template <typename DataFrame>
 void preview_columns(DataFrame &df, const std::vector<std::string> &candidates,
                      const std::string &label, unsigned int row_limit = kPreviewRowLimit) {
@@ -58,17 +92,32 @@ bool ensure_processing_library_available() {
     }
     initialised = true;
 
-    const char *candidates[] = {"librarexsec_processing", "librarexsec_processing.so",
-                                "librarexsec_processing.dylib"};
-    for (const auto *name : candidates) {
-        if (gSystem->Load(name) >= 0) {
+    std::filesystem::path current_file = std::filesystem::absolute(__FILE__);
+    auto repo_root = current_file.parent_path().parent_path();
+
+    const std::vector<std::string> candidates = {"librarexsec_processing",
+                                                 "librarexsec_processing.so",
+                                                 "librarexsec_processing.dylib"};
+
+    if (try_load_candidates(candidates)) {
+        available = true;
+        return true;
+    }
+
+    if (const char *override_path = gSystem->Getenv("RAREXSEC_PROCESSING_LIBRARY")) {
+        if (try_load_library(override_path)) {
             available = true;
             return true;
         }
     }
 
-    std::filesystem::path current_file = std::filesystem::absolute(__FILE__);
-    auto repo_root = current_file.parent_path().parent_path();
+    add_repository_relative_library_paths(repo_root);
+
+    if (try_load_candidates(candidates)) {
+        available = true;
+        return true;
+    }
+
     auto include_dir = repo_root / "include";
     gInterpreter->AddIncludePath(include_dir.string().c_str());
 
@@ -83,9 +132,11 @@ bool ensure_processing_library_available() {
         return true;
     }
 
-    std::cerr << "[rarexsec] Unable to load librexsec_processing and failed to compile the"
-              << " inline fallback. Build the project (e.g. 'make build-lib') or set"
-              << " RAREXSEC_PROCESSING_LIBRARY to the compiled library path.\n";
+    std::cerr << "[rarexsec] Unable to load librexsec_processing via the default names,"
+              << " RAREXSEC_PROCESSING_LIBRARY override, or repository build directories,"
+              << " and failed to compile the inline fallback. Build the project"
+              << " (e.g. 'make build-lib') or set RAREXSEC_PROCESSING_LIBRARY to the"
+              << " compiled library path.\n";
     available = false;
     return false;
 }
