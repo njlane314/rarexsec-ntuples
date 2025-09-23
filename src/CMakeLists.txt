@@ -13,7 +13,7 @@ set(rarexsec_processing_sources
     ReconstructionProcessor.cpp
     TruthChannelProcessor.cpp
     WeightProcessor.cpp
-    ShardWriter.cpp
+    FriendWriter.cpp
 )
 
 set(rarexsec_processing_dictionary_headers

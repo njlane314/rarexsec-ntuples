@@ -13,9 +13,9 @@ namespace proc {
 
 struct ProvenanceDicts;
 
-struct ShardEntry {
+struct HubEntry {
     // Identity
-    UInt_t shard_id = 0U;
+    UInt_t entry_id = 0U;
     UInt_t sample_id = 0U;
     UShort_t beam_id = 0U;
     UShort_t period_id = 0U;
@@ -23,8 +23,10 @@ struct ShardEntry {
     UChar_t origin_id = 0U;
 
     // Location
-    std::string shard_path;
-    std::string tree_name;
+    std::string dataset_path;
+    std::string dataset_tree;
+    std::string friend_path;
+    std::string friend_tree;
 
     // Summary
     ULong64_t n_events = 0ULL;
@@ -48,12 +50,12 @@ class HubCatalog {
     explicit HubCatalog(const std::string &hub_path, bool create = false);
     ~HubCatalog();
 
-    void addShardEntry(const ShardEntry &entry);
-    void addShardEntries(const std::vector<ShardEntry> &entries);
-    std::vector<std::string> queryShardPaths(const std::string &selection) const;
+    void addEntry(const HubEntry &entry);
+    void addEntries(const std::vector<HubEntry> &entries);
 
     void writeDictionaries(const ProvenanceDicts &dicts);
-    void writeSummary(double total_pot, long total_triggers);
+    void writeSummary(double total_pot, long total_triggers, const std::string &base_directory,
+                      const std::string &friend_tree_name);
     void finalize();
 
   private:
@@ -62,8 +64,8 @@ class HubCatalog {
     TTree *meta_tree_;
     mutable std::mutex mutex_;
 
-    ShardEntry current_entry_;
-    UInt_t next_shard_id_;
+    HubEntry current_entry_;
+    UInt_t next_entry_id_;
     std::string meta_key_;
     std::string meta_value_;
     bool finalized_;
