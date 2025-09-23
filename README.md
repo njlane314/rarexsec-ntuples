@@ -7,7 +7,6 @@
 ```bash
 make                # configure into ./build and compile the library + tools
 make install        # install into ./install by default
-make test           # run ctest (a placeholder target is provided)
 make distclean      # remove the ./build directory entirely
 
 make build-lib      # configure ./build-lib with only the processing library
