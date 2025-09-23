@@ -25,34 +25,46 @@ class VariableRegistry {
         ColumnCollection optional;
     };
 
-    void includeCommonColumn(const std::string &column) { common_required_columns_.push_back(column); }
+    void includeCommonColumn(const std::string &column) {
+        common_required_columns_.push_back(column);
+        invalidateColumnPlanCache();
+    }
 
     void includeCommonColumns(const ColumnCollection &columns) {
         common_required_columns_.insert(common_required_columns_.end(), columns.begin(), columns.end());
+        invalidateColumnPlanCache();
     }
 
-    void includeCommonOptionalColumn(const std::string &column) { common_optional_columns_.push_back(column); }
+    void includeCommonOptionalColumn(const std::string &column) {
+        common_optional_columns_.push_back(column);
+        invalidateColumnPlanCache();
+    }
 
     void includeCommonOptionalColumns(const ColumnCollection &columns) {
         common_optional_columns_.insert(common_optional_columns_.end(), columns.begin(), columns.end());
+        invalidateColumnPlanCache();
     }
 
     void includeRequiredColumn(SampleOrigin origin, const std::string &column) {
         origin_column_plans_[origin].required.push_back(column);
+        invalidateColumnPlanCache();
     }
 
     void includeRequiredColumns(SampleOrigin origin, const ColumnCollection &columns) {
         auto &bucket = origin_column_plans_[origin].required;
         bucket.insert(bucket.end(), columns.begin(), columns.end());
+        invalidateColumnPlanCache();
     }
 
     void includeOptionalColumn(SampleOrigin origin, const std::string &column) {
         origin_column_plans_[origin].optional.push_back(column);
+        invalidateColumnPlanCache();
     }
 
     void includeOptionalColumns(SampleOrigin origin, const ColumnCollection &columns) {
         auto &bucket = origin_column_plans_[origin].optional;
         bucket.insert(bucket.end(), columns.begin(), columns.end());
+        invalidateColumnPlanCache();
     }
 
     void includeColumn(SampleOrigin origin, const std::string &column) { includeRequiredColumn(origin, column); }
@@ -64,9 +76,15 @@ class VariableRegistry {
     void setBeamMode(const std::string &beam) {
         beam_mode_ = beam;
         canonical_beam_mode_ = canonicaliseBeamName(beam_mode_);
+        invalidateColumnPlanCache();
     }
 
     ColumnPlan columnPlanFor(SampleOrigin type) const {
+        const auto cached = column_plan_cache_.find(type);
+        if (cached != column_plan_cache_.end()) {
+            return cached->second;
+        }
+
         ColumnPlan plan;
         std::unordered_set<std::string> required_seen;
         std::unordered_set<std::string> optional_seen;
@@ -117,6 +135,7 @@ class VariableRegistry {
             }
         }
 
+        column_plan_cache_.emplace(type, plan);
         return plan;
     }
 
@@ -172,6 +191,8 @@ class VariableRegistry {
     }
 
   private:
+    void invalidateColumnPlanCache() { column_plan_cache_.clear(); }
+
     static const std::unordered_set<std::string> &numiSplitTriggerColumns() {
         static const std::unordered_set<std::string> columns = {
             "software_trigger_post",
@@ -698,6 +719,7 @@ class VariableRegistry {
     ColumnCollection common_required_columns_;
     ColumnCollection common_optional_columns_;
     std::map<SampleOrigin, ColumnPlan> origin_column_plans_;
+    mutable std::unordered_map<SampleOrigin, ColumnPlan> column_plan_cache_;
     std::string beam_mode_;
     std::string canonical_beam_mode_;
 };
