@@ -85,7 +85,7 @@ int main() {
         WeightProcessor processor(makeSampleConfig(sample_pot, 0), total_pot, total_triggers);
         auto processed = processor.process(makeInput(), origin);
 
-        const auto base_weights = processed.Take<double>("base_event_weight");
+        auto base_weights = processed.Take<double>("base_event_weight");
         check(base_weights && base_weights->size() == 3, "Simulation base weights size", failures);
         if (base_weights && base_weights->size() == 3) {
             checkEqual(base_weights->at(0), 2.0, "Simulation base weight entry 0", failures);
@@ -93,7 +93,7 @@ int main() {
             checkEqual(base_weights->at(2), 6.0, "Simulation base weight entry 2", failures);
         }
 
-        const auto nominal_weights = processed.Take<double>("nominal_event_weight");
+        auto nominal_weights = processed.Take<double>("nominal_event_weight");
         check(nominal_weights && nominal_weights->size() == 3, "Simulation nominal weights size", failures);
         if (nominal_weights && nominal_weights->size() == 3) {
             checkEqual(nominal_weights->at(0), 2.0, "Simulation nominal weight entry 0", failures);
@@ -110,14 +110,14 @@ int main() {
     ROOT::RDataFrame df(2);
     auto processed = processor.process(df, SampleOrigin::kExternal);
 
-    const auto base_weights = processed.Take<double>("base_event_weight");
+    auto base_weights = processed.Take<double>("base_event_weight");
     check(base_weights && base_weights->size() == 2, "External base weights size", failures);
     if (base_weights && base_weights->size() == 2) {
         checkEqual(base_weights->at(0), 2.5, "External base weight entry 0", failures);
         checkEqual(base_weights->at(1), 2.5, "External base weight entry 1", failures);
     }
 
-    const auto nominal_weights = processed.Take<double>("nominal_event_weight");
+    auto nominal_weights = processed.Take<double>("nominal_event_weight");
     check(nominal_weights && nominal_weights->size() == 2, "External nominal weights size", failures);
     if (nominal_weights && nominal_weights->size() == 2) {
         checkEqual(nominal_weights->at(0), 2.5, "External nominal weight entry 0", failures);
