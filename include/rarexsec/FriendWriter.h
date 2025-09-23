@@ -40,6 +40,11 @@ class FriendWriter {
   private:
     FriendConfig config_;
 
+    ROOT::RDF::RSnapshotOptions makeSnapshotOptions() const;
+    std::filesystem::path writeFriendToPath(ROOT::RDF::RNode df,
+                                            const std::filesystem::path &path,
+                                            const std::vector<std::string> &columns,
+                                            const ROOT::RDF::RSnapshotOptions &options) const;
     std::filesystem::path generateFriendPath(const std::string &sample_key,
                                              const std::string &variation) const;
 };
